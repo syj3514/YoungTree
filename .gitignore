@@ -1,0 +1,8 @@
+output.log
+youngtree_test_backup.ipynb
+
+*.log
+**/__pycache__/**
+**/data/**
+**/images/**
+*test*
