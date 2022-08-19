@@ -24,8 +24,10 @@ class timer():
         if self.debugger is not None:
             self.debugger.info(f"{text} START")
     
-    def done(self):
+    def done(self, add=None):
         elapse = time.time()-self.ref
+        if add is not None:
+            self.text = f"{self.text} {add}"
         if self.verbose>0:
             print(f"{self.text} Done ({elapse/self.corr:.3f} {self.unit})")
         if self.debugger is not None:
@@ -213,6 +215,13 @@ def rms(*args):
         inst += arg**2
     return np.sqrt(inst)
 
+@nb.njit(fastmath=True)
+def nbnorm(l):
+    s = 0.
+    for i in range(l.shape[0]):
+        s += l[i]**2
+    return np.sqrt(s)
+
 @nb.jit(parallel=True)
 def large_isin(a, b):
     '''
@@ -226,16 +235,29 @@ def large_isin(a, b):
     [False, True, False, True, False, True]
     '''
     # region
-    shape = a.shape
-    a = a.ravel()
+    # shape = a.shape
+    # a = a.ravel()
     n = len(a)
     result = np.full(n, False)
     set_b = set(b)
     for i in nb.prange(n):
         if a[i] in set_b:
             result[i] = True
-    return result.reshape(shape)
+    return result
+    # return result.reshape(shape)
     # endregion
+
+@nb.jit(fastmath=True)
+def atleast_numba(a, b):
+    '''
+    Return True if any element of a is in b
+    '''
+    n = len(a)
+    set_b = set(b)
+    for i in nb.prange(n):
+        if a[i] in set_b:
+            return True
+    # return result.reshape(shape)
 
 def atleast_isin(a, b):
     '''

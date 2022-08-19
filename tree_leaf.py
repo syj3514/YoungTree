@@ -8,7 +8,7 @@ from tree_utool import *
 ###############         Leaf Class                #######
 #########################################################
 class Leaf():
-    def __init__(self, gal, BranchObj, DataObj, verbose=1, prefix="", debugger=None, **kwargs):
+    def __init__(self, gal, BranchObj, DataObj, verbose=1, prefix="", debugger=None, interplay=False, **kwargs):
         func = f"[__Leaf__]"; prefix = f"{prefix}{func}"
         # clock = timer(text=prefix, verbose=verbose, debugger=debugger)
         self.debugger=debugger
@@ -22,10 +22,12 @@ class Leaf():
         self.galid, self.iout = self.gal_gm['id'], self.gal_gm['timestep']
         self.istep = out2step(self.iout, galaxy=self.galaxy, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep)
         
-        self.havefats = False
+        self.fatids = {}
         self.part = None
         self.pruned = False
+        self.interplay = interplay
         prefix += f"<ID{self.galid}:iout(istep)={self.iout}({self.istep})>"
+        self.refv = None
         self.load_parts(prefix=prefix)
         self.importance(prefix=prefix, usevel=True)
 
@@ -94,28 +96,30 @@ class Leaf():
 
         iout, istep = ioutistep(igals[0], galaxy=self.galaxy, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep)
         jout = step2out(istep-1-njump, galaxy=self.galaxy, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep)
-        agals = self.data.load_gal(jout, 'all', return_part=False, prefix=prefix)
+        jgals = self.data.load_gal(jout, 'all', return_part=False, prefix=prefix)
         dt = self.data.load_snap(iout, prefix=prefix).params['age'] - self.data.load_snap(jout, prefix=prefix).params['age']
         dt *= 1e9 * 365 * 24 * 60 * 60 # Gyr to sec
         fats = np.zeros(3).astype(int)
-        for igal in igals:
+        
+        for igal in igals: # tester galaxies at iout
             ivel = rms(igal['vx'], igal['vy'], igal['vz'])
             isnap = self.data.load_snap(jout, prefix=prefix)
             radii = 5*max(igal['r'],1e-4) + 5*dt*ivel*isnap.unit['km']
-            neighbors = cut_sphere(agals, igal['x'], igal['y'], igal['z'], radii, both_sphere=True)
+            neighbors = cut_sphere(jgals, igal['x'], igal['y'], igal['z'], radii, both_sphere=True)
             self.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} in radii")
+            if len(neighbors) > nfat:
+                _, checkpart = self.data.load_gal(iout, igal['id'], return_part=True, prefix=prefix)
             
-            if len(neighbors)>0:
+            if len(neighbors)>0: # candidates at jout
                 neighbors = neighbors[neighbors['m'] >= igal['m']*masscut_percent/100]
                 self.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} after masscut {masscut_percent} percent")
                 if len(neighbors) > nfat:
                     rate = np.zeros(len(neighbors))
                     gals, gmpids = self.data.load_gal(jout, neighbors['id'], return_part=True, prefix=prefix)
                     iout, istep = ioutistep(igal, galaxy=self.galaxy, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep)
-                    _, checkpart = self.data.load_gal(iout, igal['id'], return_part=True, prefix=prefix)
                     ith = 0
-                    for gal, gmpid in zip(gals, gmpids):
-                        if atleast_isin(checkpart, gmpid):
+                    for _, gmpid in zip(gals, gmpids):
+                        if atleast_numba(checkpart, gmpid):
                             ind = large_isin(checkpart, gmpid)
                             rate[ith] = howmany(ind, True)/len(checkpart)
                         ith += 1
@@ -144,29 +148,41 @@ class Leaf():
         ############################################################
         ########    ADD case when no father, jump beyond     ####### Maybe done?
         ############################################################
-        if not self.havefats:
+        # if not self.fatids:
+        keys = list(self.fatids.keys())
+        if len(keys) < 5:
             func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
             clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
 
             igals = np.atleast_1d(self.gal_gm)
             njump=0
             for i in range(nstep):
-                fatids, jout = self.load_fatids(igals, njump=njump, masscut_percent=masscut_percent, nfat=nfat, prefix=prefix, **kwargs)
-                iout = step2out(self.istep-1-i, galaxy=self.galaxy, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep)
-                self.debugger.info(f"*** iout(istep)={iout}({self.istep-1-i}), fats={fatids}")
-                if len(fatids) == 0:
-                    self.debugger.info("JUMP!!")
-                    njump += 1
-                    if not self.havefats:
-                        self.havefats=False
-                else:
-                    njump = 0
-                    self.havefats=True
-                    self.branch.update_cands(iout, fatids, checkids=self.part['id'], prefix=prefix) # -> update self.branch.candidates & self.branch.scores
-                    igals = self.data.load_gal(iout, fatids, return_part=False, prefix=prefix)
+                if self.istep-1-i > 0:
+                    iout = step2out(self.istep-1-i, galaxy=self.galaxy, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep)
+                    if iout in keys:
+                        fatids = self.fatids[iout]
+                    else:
+                        fatids, jout = self.load_fatids(igals, njump=njump, masscut_percent=masscut_percent, nfat=nfat, prefix=prefix, **kwargs)
+                        self.fatids[iout] = fatids
+                    self.debugger.info(f"*** iout(istep)={iout}({self.istep-1-i}), fats={fatids}")
+                    if len(fatids) == 0:
+                        self.debugger.info("JUMP!!")
+                        njump += 1
+
+                        # if not self.fatids:
+                        #     self.fatids=False
+                    else:
+                        njump = 0
+                        # self.fatids=True
+                        self.branch.update_cands(iout, fatids, checkids=self.part['id'], prefix=prefix) # -> update self.branch.candidates & self.branch.scores
+                        igals = self.data.load_gal(iout, fatids, return_part=False, prefix=prefix)
 
             clock.done()
-        return self.havefats
+        keys = list(self.fatids.keys())
+        if len(keys)==0:
+            return False
+        temp = np.sum([len(self.fatids[key]) for key in keys])
+        return temp > 0
     
 
     def calc_score(self, prefix=""):
@@ -188,6 +204,8 @@ class Leaf():
                     score2 = 0  # Velocity offset
                     score3 = 0
                     if score1 > 0 or score0 > 0:
+                        if self.interplay:
+                            score1 *= self.calc_matchrate(self, checkpart=ileaf.part, prefix=prefix)
                         score2 = self.calc_velocity_offset(ileaf, prefix=prefix)
                         score3 = np.exp( -np.abs(np.log10(self.gal_gm['m']/ileaf.gal_gm['m'])) )   # Mass difference
                 except Warning as e:
@@ -219,26 +237,35 @@ class Leaf():
                 tgyr = self.data.load_snap(otherleaf.iout, prefix=prefix).params['age']
                 igyr = self.data.load_snap(self.iout, prefix=prefix).params['age']
                 checkpart = self.part[ self.part['age','Gyr'] >= (igyr-tgyr) ]
-        if atleast_isin(checkpart['id'], otherleaf.part['id']):
+        if atleast_numba(checkpart['id'], otherleaf.part['id']):
             ind = large_isin(checkpart['id'], otherleaf.part['id'])
         else:
+            # clock.done(add=f"({len(checkpart['id'])} vs {len(otherleaf.part['id'])})")
             return -1
-        # clock.done()
+        # clock.done(add=f"({len(checkpart['id'])} vs {len(otherleaf.part['id'])})")
         return np.sum( checkpart['m'][ind]/checkpart['dist'][ind] ) / np.sum( checkpart['m']/checkpart['dist'] )
 
 
-    def calc_bulkmotion(self, checkpart=None, prefix="", **kwargs):
+    def calc_bulkmotion(self, checkpart=None, useold=False, prefix="", **kwargs):
         # Subject to `calc_velocity_offset`
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
         # clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
+        
+        if (useold) and (self.refv is not None):
+            # clock.done()
+            return self.refv
 
+        switch = False
         if checkpart is None:
+            switch = True
             checkpart = self.part
 
         try:
             vx = np.average(checkpart['vx', 'km/s'], weights=checkpart['m']/checkpart['dist'])
             vy = np.average(checkpart['vy', 'km/s'], weights=checkpart['m']/checkpart['dist'])
             vz = np.average(checkpart['vz', 'km/s'], weights=checkpart['m']/checkpart['dist'])
+            if switch:
+                self.refv = np.array([vx,vy,vz])
         except Warning as e:
             print("WARNING!! in calc_bulkmotion")
             breakpoint()
@@ -249,7 +276,7 @@ class Leaf():
             self.debugger.warning(self.summary())
             raise ValueError("velocity wrong!")
 
-        # clock.done()
+        # clock.done(add=f"({len(checkpart['id'])})")
         return np.array([vx, vy, vz])
 
     
@@ -260,12 +287,14 @@ class Leaf():
 
         ind = large_isin(otherleaf.part['id'], self.part['id'])
         if howmany(ind, True) < 3:
+            # clock.done(add=f"({len(self.part['id'])} vs {howmany(ind, True)})")
             return 0
         else:
-            refv = self.calc_bulkmotion(prefix=prefix)
+            refv = self.calc_bulkmotion(useold=True, prefix=prefix)
             instar = otherleaf.part[ind]
             inv = self.calc_bulkmotion(checkpart=instar, prefix=prefix) - refv
             totv = np.array([otherleaf.gal_gm['vx'], otherleaf.gal_gm['vy'], otherleaf.gal_gm['vz']]) - refv
 
-        # clock.done()
-        return 1 - np.sqrt( np.sum((totv - inv)**2) )/(np.linalg.norm(inv)+np.linalg.norm(totv))
+        # clock.done(add=f"({len(self.part['id'])} vs {howmany(ind, True)})")
+        # return 1 - np.sqrt( np.sum((totv - inv)**2) )/(np.linalg.norm(inv)+np.linalg.norm(totv))
+        return 1 - nbnorm(totv - inv) / (nbnorm(inv)+nbnorm(totv))

@@ -95,7 +95,7 @@ class Treebase():
         return text
         
         
-    def make_branches(self, iout, galids=None, prefix=""):
+    def make_branches(self, iout, galids=None, interplay=False, prefix=""):
         # Subject to queue
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
@@ -103,15 +103,15 @@ class Treebase():
         gals = self.load_gal(iout, galid=galids, prefix=prefix)
 
         for gal in gals:
-            self.branches_queue[gal['id']]=Branch(gal, self, galaxy=self.galaxy, mode=self.simmode, verbose=self.verbose, prefix=prefix, debugger=self.debugger)
+            self.branches_queue[gal['id']]=Branch(gal, self, galaxy=self.galaxy, mode=self.simmode, verbose=self.verbose, prefix=prefix, debugger=self.debugger, interplay=False)
 
         clock.done()
 
-    def queue(self, iout, gals, treeleng=None, prefix=""):
+    def queue(self, iout, gals, treeleng=None, interplay=False, prefix=""):
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
 
-        self.make_branches(iout, gals['id'], prefix=prefix)
+        self.make_branches(iout, gals['id'], interplay=False, prefix=prefix)
         self.debugger.info(f"{prefix}\n{self.summary()}")
         try:
             go=True
@@ -310,7 +310,7 @@ class Treebase():
             # clock2 = timer(text=prefix+"[GalaxyMaker load]", verbose=self.verbose, debugger=self.debugger)
             if gal is None:
                 gal = self.load_gal(iout, galid, prefix=prefix)
-            self.dict_leaves[iout][galid] = Leaf(gal, branch, self, verbose=self.verbose-1, prefix=prefix, debugger=self.debugger)
+            self.dict_leaves[iout][galid] = Leaf(gal, branch, self, verbose=self.verbose-1, prefix=prefix, debugger=self.debugger, interplay=branch.interplay)
         
         if not branch.root['id'] in self.dict_leaves[iout][galid].parents:
             self.dict_leaves[iout][galid].branch = branch
@@ -347,7 +347,7 @@ class Treebase():
                     else:
                         part = copy.deepcopy(snap.part['dm'].table)
                     part['id'] = np.abs(part['id'])
-                    if atleast_isin(part['id'], gpid):
+                    if atleast_numba(part['id'], gpid):
                         part = part[large_isin(part['id'], gpid)]
                         leng = len(part['id'])
                     else:

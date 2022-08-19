@@ -9,7 +9,7 @@ from tree_leaf import Leaf
 ###############         Branch Class                #####
 #########################################################
 class Branch():
-    def __init__(self, root, DataObj, galaxy=True, mode='hagn', verbose=2, prefix="", debugger=None, **kwargs):
+    def __init__(self, root, DataObj, galaxy=True, mode='hagn', verbose=2, prefix="", debugger=None, interplay=False, **kwargs):
         func = f"[__Branch__]"; prefix = f"{prefix}{func}"
         clock = timer(text=prefix, verbose=verbose, debugger=debugger)
         self.debugger=debugger
@@ -37,7 +37,7 @@ class Branch():
             raise ValueError(f"{mode} is not supported!")
 
         
-                
+        self.interplay=interplay
         self.candidates = {} # dictionary of Leafs
         self.scores = {}
         self.score0s = {}
@@ -121,7 +121,8 @@ class Branch():
             self.go = self.rootleaf.find_candidates(prefix=prefix, **kwargs)
             # dprint(f"*** go? {self.go}", self.debugger)
             if len(self.candidates.keys())>0:
-                self.rootleaf.calc_score(prefix=prefix)
+                if jout != self.rootout:
+                    self.rootleaf.calc_score(prefix=prefix)
                 self.choose_winner(jout, prefix=prefix)
             else:
                 self.go = False
@@ -175,6 +176,9 @@ class Branch():
         clock.done()
 
     def gal2leaf(self, gal, prefix=""):
+        func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
+        clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
+
         iout, istep = ioutistep(gal, galaxy=self.galaxy, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep)
         if not iout in self.candidates.keys():
             self.debugger.debug(f"{prefix} *** no iout{iout} in candidates --> make it!")
@@ -201,6 +205,8 @@ class Branch():
         if self.candidates[iout][gal['id']].pruned:
             self.debugger.debug(f"{prefix} *** id{gal['id']} at iout{iout} exists but pruned --> remake it!")
             self.data.load_leaf(iout, gal['id'], self, gal=gal, prefix=prefix)
+        
+        clock.done()
         return self.candidates[iout][gal['id']]
 
 
@@ -211,10 +217,10 @@ class Branch():
         if checkids is not None:
             gals, gmpids = self.data.load_gal(iout, galids, return_part=True, prefix=prefix)
             for gal, gmpid in zip(gals, gmpids):
-                if atleast_isin(gmpid, checkids):
+                if atleast_numba(gmpid, checkids):
                     self.gal2leaf(gal, prefix=prefix)
                 else:
-                    self.debugger.debug(f"{prefix} *** id{gal['id']} at iout{iout} has no common parts of {len(checkids)}!")
+                    self.debugger.info(f"{prefix} *** id{gal['id']} at iout{iout} has no common parts of {len(checkids)}!")
                     pass
         else:
             gals = self.data.load_gal(iout, galids, return_part=False, prefix=prefix)
