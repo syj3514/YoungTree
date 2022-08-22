@@ -207,7 +207,7 @@ class Branch():
             self.debugger.debug(f"{prefix} *** id{gal['id']} at iout{iout} exists but pruned --> remake it!")
             self.data.load_leaf(iout, gal['id'], self, gal=gal, prefix=prefix)
         
-        clock.done()
+        clock.done() # <---
         return self.candidates[iout][gal['id']]
 
 

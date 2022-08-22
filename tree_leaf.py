@@ -61,7 +61,7 @@ class Leaf():
     def importance(self, prefix="", usevel=True):
         # Subject to `__init__`
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
-        # clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
+        clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
     
         cx, cy, cz = self.gal_gm['x'],self.gal_gm['y'],self.gal_gm['z']
         dist = distance3d(cx,cy,cz, self.part['x'], self.part['y'], self.part['z']) / self.gal_gm['rvir']
@@ -87,7 +87,7 @@ class Leaf():
         table["dist"] = dist
         self.part = uri.RamsesSnapshot.Particle(table, self.part.snap)
 
-        # clock.done()
+        clock.done()
     
 
     def load_fatids(self, igals, njump=0, masscut_percent=1, nfat=5, prefix="", **kwargs):
@@ -230,7 +230,7 @@ class Leaf():
     def calc_matchrate(self, otherleaf, checkpart=None, prefix=""):
         # Subject to `calc_score`
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
-        # clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
+        clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
 
         if checkpart is None:
             checkpart = self.part
@@ -241,9 +241,9 @@ class Leaf():
         if atleast_numba(checkpart['id'], otherleaf.part['id']):
             ind = large_isin(checkpart['id'], otherleaf.part['id'])
         else:
-            # clock.done(add=f"({len(checkpart['id'])} vs {len(otherleaf.part['id'])})")
+            clock.done(add=f"({len(checkpart['id'])} vs {len(otherleaf.part['id'])})")
             return -1
-        # clock.done(add=f"({len(checkpart['id'])} vs {len(otherleaf.part['id'])})")
+        clock.done(add=f"({len(checkpart['id'])} vs {len(otherleaf.part['id'])})")
         return np.sum( checkpart['m'][ind]/checkpart['dist'][ind] ) / np.sum( checkpart['m']/checkpart['dist'] )
 
 
@@ -284,11 +284,11 @@ class Leaf():
     def calc_velocity_offset(self, otherleaf, prefix="", **kwargs):
         # Subject to `calc_score`
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
-        # clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
+        clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
 
         ind = large_isin(otherleaf.part['id'], self.part['id'])
         if howmany(ind, True) < 3:
-            # clock.done(add=f"({len(self.part['id'])} vs {howmany(ind, True)})")
+            clock.done(add=f"({len(self.part['id'])} vs {howmany(ind, True)})")
             return 0
         else:
             refv = self.calc_bulkmotion(useold=True, prefix=prefix)
@@ -296,6 +296,6 @@ class Leaf():
             inv = self.calc_bulkmotion(checkpart=instar, prefix=prefix) - refv
             totv = np.array([otherleaf.gal_gm['vx'], otherleaf.gal_gm['vy'], otherleaf.gal_gm['vz']]) - refv
 
-        # clock.done(add=f"({len(self.part['id'])} vs {howmany(ind, True)})")
+        clock.done(add=f"({len(self.part['id'])} vs {howmany(ind, True)})")
         # return 1 - np.sqrt( np.sum((totv - inv)**2) )/(np.linalg.norm(inv)+np.linalg.norm(totv))
         return 1 - nbnorm(totv - inv) / (nbnorm(inv)+nbnorm(totv))
