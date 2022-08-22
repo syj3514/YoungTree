@@ -212,31 +212,33 @@ class Leaf():
         timekeys = self.branch.candidates.keys()
         checkpid = self.pid
         igyr = self.data.load_snap(self.iout, prefix=prefix).params['age']
-        allcands = tuple( self.branch.candidates[tout][key] for tout in timekeys for key in self.branch.candidates[tout].keys() )
-        nums = [len(self.branch.candidates[tout]) for tout in timekeys]
-        nums = np.insert(np.cumsum(nums),0,0)
-        ind0ss = self.atleast_leaf(allcands, self.branch.inipid)
+        # allcands = tuple( self.branch.candidates[tout][key] for tout in timekeys for key in self.branch.candidates[tout].keys() )
+        # nums = [len(self.branch.candidates[tout]) for tout in timekeys]
+        # nums = np.insert(np.cumsum(nums),0,0)
+        # ind0ss = self.atleast_leaf(allcands, self.branch.inipid)
         for tth, tout in enumerate(timekeys):
             candidates = self.branch.candidates[tout]
-            ind0s = [ ind0ss[nums[tth]:nums[tth+1]] ]
+            # ind0s = [ ind0ss[nums[tth]:nums[tth+1]] ]
             if self.galaxy:
                 tgyr = self.data.load_snap(tout, prefix=prefix).params['age']
                 ageind = self.page >= (igyr-tgyr)
                 checkpid = self.pid[ ageind ]
                 checkwei = self.pweight[ ageind ]
 
-            if len(candidates.keys())>0:
-                ind1s = self.atleast_leaf(candidates.values(), checkpid)
+            # if len(candidates.keys())>0:
+            #     ind1s = self.atleast_leaf(candidates.values(), checkpid)
             
             ith = 0
             for i, ileaf in candidates.items():
                 try:
-                    score0 = -1
-                    if ind0s[ith]:
-                        score0 = self.calc_matchrate(ileaf, checkpid=self.branch.inipid, weight=self.branch.inipwei, prefix=prefix)
-                    score1 = -1
-                    if ind1s[ith]:
-                        score1 = self.calc_matchrate(ileaf, checkpid=checkpid, weight=checkwei, prefix=prefix) # importance weighted matchrate
+                    # score0 = -1
+                    # if ind0s[ith]:
+                    #     score0 = self.calc_matchrate(ileaf, checkpid=self.branch.inipid, weight=self.branch.inipwei, prefix=prefix)
+                    score0 = self.calc_matchrate(ileaf, checkpid=self.branch.inipid, weight=self.branch.inipwei, prefix=prefix)
+                    # score1 = -1
+                    # if ind1s[ith]:
+                    #     score1 = self.calc_matchrate(ileaf, checkpid=checkpid, weight=checkwei, prefix=prefix) # importance weighted matchrate
+                    score1 = self.calc_matchrate(ileaf, checkpid=checkpid, weight=checkwei, prefix=prefix) # importance weighted matchrate
                     score2 = 0  # Velocity offset
                     score3 = 0
                     if score1 > 0 or score0 > 0:
@@ -292,6 +294,8 @@ class Leaf():
         #     return -1
         ind = large_isin(checkpid, otherleaf.pid)
         clock.done(add=f"({len(checkpid)} vs {otherleaf.nparts})")
+        if howmany(ind,True)==0:
+            return -1
         return np.sum( weight[ind] ) / np.sum( weight )
 
 
