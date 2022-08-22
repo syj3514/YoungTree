@@ -71,8 +71,10 @@ def load_nout(mode='hagn', galaxy=True):
         ind = [True if "tree_bricks" in file else False for file in fnames]
     fnames = fnames[ind]
     fnames = -np.sort( -np.array([int(file[11:]) for file in fnames]) )
-    fout = os.listdir(f"{repo}/snapshots")
-    ind = [True if f"output_{fnum:05d}" in fout else False for fnum in fnames]
+    # fout = os.listdir(f"{repo}/snapshots")
+    fout = os.listdir(f"{repo}/ptree")
+    # ind = [True if f"output_{fnum:05d}" in fout else False for fnum in fnames]
+    ind = [True if f"ptree_{fnum:05d}.pkl" in fout else False for fnum in fnames]
     return fnames[ind]
 
 def load_nstep(mode='hagn', galaxy=True, nout=None):
