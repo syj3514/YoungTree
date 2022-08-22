@@ -223,7 +223,7 @@ class Treebase():
                     for galid in jkeys:
                         if len(self.dict_leaves[iout][galid].parents)==0:
                             refmem = MB()
-                            self.dict_leaves[iout][galid].clear()
+                            self.dict_leaves[iout][galid].clear(msgfrom="flush_auto")
                             self.dict_leaves[iout][galid] = None
                             del self.dict_leaves[iout][galid]
                             gc.collect()
@@ -265,7 +265,7 @@ class Treebase():
             func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
             # clock2 = timer(text=prefix+"[GalaxyMaker load]", verbose=self.verbose, debugger=self.debugger)
             snap = self.load_snap(iout, prefix=prefix)
-            gm, gmpid = uhmi.HaloMaker.load(snap, galaxy=self.galaxy, load_parts=True)
+            gm, gmpid = uhmi.HaloMaker.load(snap, galaxy=self.galaxy, load_parts=True, copy=True)
             self.dict_gals["galaxymakers"][iout] = copy.deepcopy(gm)
             cumparts = np.insert(np.cumsum(gm["nparts"]), 0, 0)
             gmpid = [gmpid[ cumparts[i]:cumparts[i+1] ] for i in range(len(gm))]

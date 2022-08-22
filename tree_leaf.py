@@ -39,8 +39,9 @@ class Leaf():
         text = f"<Leaf object> {self.data.galstr}{self.galid} at iout{self.iout}\n\troot parents: {self.parents}\n\tcurrent branch: {self.branch.root['id']}\n\t{len(self.part['id'])} {self.data.partstr}s"
         return text
 
-    def clear(self):
+    def clear(self, msgfrom='self'):
         if len(self.parents)==0:
+            self.debugger.info(f"[CLEAR] Leaf (root={self.galid}) [from {msgfrom}]")
             self.gal_gm = None
             self.branch = None
             self.part = []

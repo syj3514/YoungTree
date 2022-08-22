@@ -53,7 +53,8 @@ class Branch():
 
         clock.done()
 
-    def clear(self):
+    def clear(self, msgfrom='self'):
+        self.debugger.info(f"[CLEAR] Branch (root={self.root['id']}) [from {msgfrom}]")
         self.inipart = None
         self.data = None
         self.root = None
@@ -73,7 +74,7 @@ class Branch():
         print(f"\n>>> GAL{a:05d} is saved as `{fname}`")
         print(f">>> Treeleng = {len(c.keys())} (elapsed {self.secrecord/60:.2f} min)\n")
         pklsave((readme, self.root,b,c,d), dir+fname, overwrite=True)
-        self.clear()
+        self.clear(msgfrom="selfsave")
 
     def summary(self, isprint=False):
         import textwrap
@@ -167,7 +168,7 @@ class Branch():
                     refmem = MB()
                     self.candidates[key][iid].parents.remove(self.root['id'])
                     self.debugger.debug(f"*** Branch({self.root['id']}) connection lost to Leaf({iid} at {key})")
-                    self.candidates[key][iid].clear()
+                    self.candidates[key][iid].clear(msgfrom="reset_branch")
                     del self.candidates[key][iid]
                     self.debugger.debug(f"* [Branch][Reset] remove {iid} leaf at iout={key} ({refmem-MB():.2f} MB saved)")
                 del self.candidates[key]
