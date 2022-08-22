@@ -194,7 +194,7 @@ class Leaf():
                     else:
                         njump = 0
                         # self.fatids=True
-                        self.branch.update_cands(iout, fatids, checkids=self.pid, prefix=prefix) # -> update self.branch.candidates & self.branch.scores
+                        fatids = self.branch.update_cands(iout, fatids, checkids=self.pid, prefix=prefix) # -> update self.branch.candidates & self.branch.scores
                         igals = self.data.load_gal(iout, fatids, return_part=False, prefix=prefix)
 
             clock.done()

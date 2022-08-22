@@ -232,6 +232,7 @@ class Branch():
                 self.gal2leaf(gal, prefix=prefix)
 
         clock.done()
+        return list(self.candidates[iout].keys())
 
 
     # def atleast_leaf(self, otherleaves, checkpid, prefix=""):
