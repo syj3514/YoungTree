@@ -19,6 +19,11 @@ from tree_leaf import Leaf
 ###############         Tree Class                #######
 #########################################################
 class Treebase():
+    __slots__ = ['iniGB', 'iniMB', 'flush_GB', 'simmode', 'galaxy', 
+                'partstr', 'Partstr', 'galstr', 'Galstr','verbose', 'debugger',
+                'rurmode', 'repo',
+                'loadall','nout','nstep',
+                'dict_snap','dict_part','dict_gals','dict_leaves','branches_queue']
     def __init__(self, simmode='hagn', galaxy=True, flush_GB=50, verbose=2, debugger=None, loadall=False, prefix=""):
         func = f"[__Treebase__]"; prefix = f"{prefix}{func}"
         clock = timer(text=prefix, verbose=verbose, debugger=debugger)
@@ -28,6 +33,7 @@ class Treebase():
         self.flush_GB = flush_GB
         self.simmode = simmode
         self.galaxy = galaxy
+
         if self.galaxy:
             self.partstr = "star"
             self.Partstr = "Star"
@@ -58,7 +64,7 @@ class Treebase():
         self.dict_part = {} # in {iout}, in {galid}, Particle object
         self.dict_gals = {"galaxymakers":{}, "gmpids":{}} # in each key, in {iout}, Recarray obejct
         self.dict_leaves = {} # in {iout}, in {galid}, Leaf object
-        self.saved_out = {"snap":[], "gal":[], "part":[]}
+        # self.saved_out = {"snap":[], "gal":[], "part":[]}
         self.branches_queue = {}
         gc.collect()
 
@@ -147,14 +153,14 @@ class Treebase():
         clock.done()
 
 
-    def check_outs(self, prefix=""):
-        func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
-        # clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
+    # def check_outs(self, prefix=""):
+    #     func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
+    #     # clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
 
-        self.saved_out["snap"] = list(self.dict_snap.keys())
-        self.saved_out["gal"] = list(self.dict_gals["galaxymakers"].keys())
-        self.saved_out["part"] = list(self.dict_part.keys())
-        # clock.done()
+    #     self.saved_out["snap"] = list(self.dict_snap.keys())
+    #     self.saved_out["gal"] = list(self.dict_gals["galaxymakers"].keys())
+    #     self.saved_out["part"] = list(self.dict_part.keys())
+    #     # clock.done()
 
     def flush_auto(self, prefix=""):
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
@@ -235,7 +241,6 @@ class Treebase():
                         gc.collect()
                         self.debugger.info(f"* [flush][Leaf] remove iout={iout} garbage ({refmem-MB():.2f} MB saved)")
 
-        self.check_outs(prefix=prefix)
         self.debugger.info(f"* [flush][Total] {reftot-MB():.2f} MB saved")
 
         clock.done()
@@ -250,7 +255,6 @@ class Treebase():
             self.dict_snap[iout] = uri.RamsesSnapshot(self.repo, iout, mode=self.rurmode, path_in_repo='snapshots')
         if not iout in self.dict_part.keys():
             self.dict_part[iout] = {}
-        self.check_outs(prefix=prefix)
 
         # clock.done()
         return self.dict_snap[iout]
@@ -263,13 +267,13 @@ class Treebase():
 
         if not iout in self.dict_gals["galaxymakers"].keys():
             func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
-            # clock2 = timer(text=prefix+"[GalaxyMaker load]", verbose=self.verbose, debugger=self.debugger)
             snap = self.load_snap(iout, prefix=prefix)
-            gm, gmpid = uhmi.HaloMaker.load(snap, galaxy=self.galaxy, load_parts=True, copy=True)
-            self.dict_gals["galaxymakers"][iout] = copy.deepcopy(gm)
+            gm, gmpid = uhmi.HaloMaker.load(snap, galaxy=self.galaxy, load_parts=True, copy=True) #<-- Bottleneck!
+            self.dict_gals["galaxymakers"][iout] = gm
             cumparts = np.insert(np.cumsum(gm["nparts"]), 0, 0)
-            gmpid = [gmpid[ cumparts[i]:cumparts[i+1] ] for i in range(len(gm))]
-            self.dict_gals["gmpids"][iout] = copy.deepcopy(gmpid)
+            # gmpid = [gmpid[ cumparts[i]:cumparts[i+1] ] for i in range(len(gm))]
+            gmpid = tuple(gmpid[ cumparts[i]:cumparts[i+1] ] for i in range(len(gm)))
+            self.dict_gals["gmpids"][iout] = gmpid #<-- Bottleneck!
             del gm; del gmpid; del cumparts
             gc.collect()
             if self.loadall:
@@ -279,7 +283,6 @@ class Treebase():
                 for gal in self.dict_gals["galaxymakers"][iout]:
                     self.load_part(iout, gal['id'], prefix=prefix, silent=True, galaxy=self.galaxy)
                 self.debugger.info(f"{prefix} *** loadall=True: loadall {self.partstr}s Done")
-            self.check_outs(prefix=prefix)
             # clock2.done()
 
         # clock.done()
@@ -289,7 +292,8 @@ class Treebase():
         elif isinstance(galid, Iterable):
             a = np.hstack([self.dict_gals["galaxymakers"][iout][ia-1] for ia in galid])
             if return_part:
-                b = [self.dict_gals["gmpids"][iout][ia-1] for ia in galid]
+                # b = [self.dict_gals["gmpids"][iout][ia-1] for ia in galid]
+                b = tuple(self.dict_gals["gmpids"][iout][ia-1] for ia in galid)
                 return a, b
             return a
         else:
@@ -343,9 +347,9 @@ class Treebase():
                     clock2.done()
                 try:
                     if galaxy:
-                        part = copy.deepcopy(snap.part['star'].table)
+                        part = np.array(snap.part['star'].table)
                     else:
-                        part = copy.deepcopy(snap.part['dm'].table)
+                        part = np.array(snap.part['dm'].table)
                     part['id'] = np.abs(part['id'])
                     if atleast_numba(part['id'], gpid):
                         part = part[large_isin(part['id'], gpid)]
@@ -359,7 +363,6 @@ class Treebase():
                     break
             part = uri.RamsesSnapshot.Particle(part, snap)
             self.dict_part[iout][galid] = part
-            self.check_outs(prefix=prefix)
         
         # clock.done()
         return self.dict_part[iout][galid]

@@ -45,7 +45,8 @@ class Branch():
         self.score2s = {}
         self.score3s = {}
         self.rootleaf = self.gal2leaf(self.root, prefix=prefix)
-        self.inipart = copy.deepcopy(self.rootleaf.part)
+        self.inipid = copy.deepcopy(self.rootleaf.pid)
+        self.inipwei = copy.deepcopy(self.rootleaf.pweight)
         self.leaves = {self.rootout: self.root} # results
         self.leave_scores = {self.rootout: 1} # results
         self.secrecord = 0
@@ -55,7 +56,7 @@ class Branch():
 
     def clear(self, msgfrom='self'):
         self.debugger.info(f"[CLEAR] Branch (root={self.root['id']}) [from {msgfrom}]")
-        self.inipart = None
+        self.inipid = None; self.inipwei=None
         self.data = None
         self.root = None
         self.candidates = {}
@@ -217,8 +218,10 @@ class Branch():
 
         if checkids is not None:
             gals, gmpids = self.data.load_gal(iout, galids, return_part=True, prefix=prefix)
-            for gal, gmpid in zip(gals, gmpids):
-                if atleast_numba(gmpid, checkids):
+            inds = atleast_numba_para(gmpids, checkids)
+            for gal, gmpid, ind in zip(gals, gmpids, inds):
+                # if atleast_numba(gmpid, checkids):
+                if ind:
                     self.gal2leaf(gal, prefix=prefix)
                 else:
                     self.debugger.info(f"{prefix} *** id{gal['id']} at iout{iout} has no common parts of {len(checkids)}!")
@@ -229,6 +232,17 @@ class Branch():
                 self.gal2leaf(gal, prefix=prefix)
 
         clock.done()
+
+
+    # def atleast_leaf(self, otherleaves, checkpid, prefix=""):
+    #     func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
+    #     clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger, level='debug')
+
+    #     ids = tuple(otherleaf.pid for otherleaf in otherleaves)
+    #     val = atleast_numba_para(ids, checkpid)
+
+    #     clock.done()
+    #     return val # True or False
 
 
     def gals_from_candidates(self, iout, prefix=""):

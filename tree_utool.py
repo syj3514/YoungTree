@@ -9,8 +9,8 @@ from collections.abc import Iterable
 
 
 class timer():
-    __slots__ = ['ref', 'units', 'corr', 'unit', 'text', 'verbose', 'debugger']
-    def __init__(self, unit="sec",text="", verbose=2, debugger=None):
+    __slots__ = ['ref', 'units', 'corr', 'unit', 'text', 'verbose', 'debugger', 'level']
+    def __init__(self, unit="sec",text="", verbose=2, debugger=None, level='info'):
         self.ref = time.time()
         self.units = {"ms":1/1000, "sec":1, "min":60, "hr":3600}
         self.corr = self.units[unit]
@@ -18,11 +18,15 @@ class timer():
         self.text = text
         self.verbose=verbose
         self.debugger=debugger
+        self.level = level
         
         if self.verbose>0:
             print(f"{text} START")
         if self.debugger is not None:
-            self.debugger.info(f"{text} START")
+            if self.level == 'info':
+                self.debugger.info(f"{text} START")
+            else:
+                self.debugger.debug(f"{text} START")
     
     def done(self, add=None):
         elapse = time.time()-self.ref
@@ -31,7 +35,10 @@ class timer():
         if self.verbose>0:
             print(f"{self.text} Done ({elapse/self.corr:.3f} {self.unit})")
         if self.debugger is not None:
-            self.debugger.info(f"{self.text} Done ({elapse/self.corr:.3f} {self.unit})")
+            if self.level == 'info':
+                self.debugger.info(f"{self.text} Done ({elapse/self.corr:.3f} {self.unit})")
+            else:
+                self.debugger.debug(f"{self.text} Done ({elapse/self.corr:.3f} {self.unit})")
 
 def dprint_(msg, debugger):
     debugger.debug(msg)
@@ -260,6 +267,23 @@ def atleast_numba(a, b):
         if a[i] in set_b:
             return True
     # return result.reshape(shape)
+
+@nb.jit(fastmath=True, parallel=True)
+def atleast_numba_para(aa, b):
+    '''
+    Return True if any element of a is in b
+    '''
+    nn = len(aa)
+    results = np.full(nn, False)
+    for j in nb.prange(nn):
+        a = aa[j]
+        n = len(a)
+        set_b = set(b)
+        for i in nb.prange(n):
+            if a[i] in set_b:
+                results[j] = True
+                break
+    return results
 
 def atleast_isin(a, b):
     '''

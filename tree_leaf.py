@@ -8,6 +8,11 @@ from tree_utool import *
 ###############         Leaf Class                #######
 #########################################################
 class Leaf():
+    __slots__ = ['debugger', 'verbose', 'branch', 'parents', 'data', 
+                'mode', 'galaxy', 'gal_gm', 'galid','iout', 'istep',
+                'fatids', 'pruned','interplay',
+                'nparts','pid','page','pm','pweight',
+                'px','py','pz','pvx','pvy','pvz']
     def __init__(self, gal, BranchObj, DataObj, verbose=1, prefix="", debugger=None, interplay=False, **kwargs):
         func = f"[__Leaf__]"; prefix = f"{prefix}{func}"
         # clock = timer(text=prefix, verbose=verbose, debugger=debugger)
@@ -23,11 +28,17 @@ class Leaf():
         self.istep = out2step(self.iout, galaxy=self.galaxy, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep)
         
         self.fatids = {}
-        self.part = None
         self.pruned = False
         self.interplay = interplay
         prefix += f"<ID{self.galid}:iout(istep)={self.iout}({self.istep})>"
-        self.refv = None
+
+        # for fast I/O
+        self.nparts = 0
+        self.pid = None
+        self.px = None; self.py = None; self.pz = None
+        self.pvx = None; self.pvy = None; self.pvz = None
+        self.page = None; self.pm = None; self.pweight = None
+
         self.load_parts(prefix=prefix)
         self.importance(prefix=prefix, usevel=True)
 
@@ -36,15 +47,18 @@ class Leaf():
     def __str__(self):
         if self.branch is None:
             return f"<Leaf object> {self.data.galstr}{self.galid} at iout{self.iout}\n\troot parents: {self.parents}\n\tPruned!"
-        text = f"<Leaf object> {self.data.galstr}{self.galid} at iout{self.iout}\n\troot parents: {self.parents}\n\tcurrent branch: {self.branch.root['id']}\n\t{len(self.part['id'])} {self.data.partstr}s"
+        text = f"<Leaf object> {self.data.galstr}{self.galid} at iout{self.iout}\n\troot parents: {self.parents}\n\tcurrent branch: {self.branch.root['id']}\n\t{self.nparts} {self.data.partstr}s"
         return text
 
     def clear(self, msgfrom='self'):
         if len(self.parents)==0:
             self.debugger.info(f"[CLEAR] Leaf (root={self.galid}) [from {msgfrom}]")
+            self.pid=None; self.page=None; self.pm=None; self.pweight=None
+            self.px=None; self.py=None; self.py=None
+            self.pvx=None; self.pvy=None; self.pvy=None
+            self.nparts=0
             self.gal_gm = None
             self.branch = None
-            self.part = []
             self.pruned = True
 
     def load_parts(self, prefix=""):
@@ -52,8 +66,14 @@ class Leaf():
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
 
-        self.part = self.data.load_part(self.iout, self.galid, prefix=prefix, galaxy=self.galaxy)
-        self.debugger.debug(prefix+f" [ID{self.galid} iout{self.iout}] Nparts={self.gal_gm['nparts']}({len(self.part['x'])})")
+        temp = self.data.load_part(self.iout, self.galid, prefix=prefix, galaxy=self.galaxy)
+        self.pid = temp['id']
+        self.nparts = len(self.pid)
+        self.px = temp['x']; self.py = temp['y']; self.pz = temp['z']
+        self.pvx = temp['vx', 'km/s']; self.pvy = temp['vy', 'km/s']; self.pvz = temp['vz', 'km/s']
+        self.page = temp['age', 'Gyr']; self.pm = temp['m']
+
+        self.debugger.debug(prefix+f" [ID{self.galid} iout{self.iout}] Nparts={self.gal_gm['nparts']}({self.nparts})")
 
         clock.done()
     
@@ -62,13 +82,13 @@ class Leaf():
         # Subject to `__init__`
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
-    
+        
         cx, cy, cz = self.gal_gm['x'],self.gal_gm['y'],self.gal_gm['z']
-        dist = distance3d(cx,cy,cz, self.part['x'], self.part['y'], self.part['z']) / self.gal_gm['rvir']
+        dist = distance3d(cx,cy,cz, self.px, self.py, self.pz) / self.gal_gm['rvir']
         if usevel:
             try:
                 cvx, cvy, cvz = self.gal_gm['vx'],self.gal_gm['vy'],self.gal_gm['vz']
-                vels = distance3d(cvx,cvy,cvz, self.part['vx'], self.part['vy'], self.part['vz'])
+                vels = distance3d(cvx,cvy,cvz, self.pvx, self.pvy, self.pvz)
                 vels /= np.std(vels)
                 dist = np.sqrt( dist**2 + vels**2 )
             except Warning as e:
@@ -76,16 +96,13 @@ class Leaf():
                 self.debugger.warning("########## WARNING #########")
                 self.debugger.warning(e)
                 self.debugger.warning(f"gal velocity {cvx}, {cvy}, {cvz}")
-                self.debugger.warning(f"len parts {len(self.part['x'])}")
+                self.debugger.warning(f"len parts {self.nparts}")
                 self.debugger.warning(f"vels first tens {vels[:10]}")
                 self.debugger.warning(f"vels std {np.std(vels)}")
                 self.debugger.warning(self.summary())
                 breakpoint()
                 raise ValueError("velocity wrong!")
-        table = append_fields(self.part.table, "dist", np.empty(
-            self.part.table.shape[0], dtype="<f8"), dtypes="<f8")
-        table["dist"] = dist
-        self.part = uri.RamsesSnapshot.Particle(table, self.part.snap)
+        self.pweight = self.pm/dist
 
         clock.done()
     
@@ -96,33 +113,35 @@ class Leaf():
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
 
         iout, istep = ioutistep(igals[0], galaxy=self.galaxy, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep)
+        isnap = self.data.load_snap(iout, prefix=prefix)
         jout = step2out(istep-1-njump, galaxy=self.galaxy, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep)
-        jgals = self.data.load_gal(jout, 'all', return_part=False, prefix=prefix)
-        dt = self.data.load_snap(iout, prefix=prefix).params['age'] - self.data.load_snap(jout, prefix=prefix).params['age']
+        jsnap = self.data.load_snap(jout, prefix=prefix)
+        jgals = self.data.load_gal(jout, 'all', return_part=False, prefix=prefix) # BOTTLENECK!!
+        dt = isnap.params['age'] - jsnap.params['age']
         dt *= 1e9 * 365 * 24 * 60 * 60 # Gyr to sec
         fats = np.zeros(3).astype(int)
         
         for igal in igals: # tester galaxies at iout
             ivel = rms(igal['vx'], igal['vy'], igal['vz'])
-            isnap = self.data.load_snap(jout, prefix=prefix)
-            radii = 5*max(igal['r'],1e-4) + 5*dt*ivel*isnap.unit['km']
+            radii = 5*max(igal['r'],1e-4) + 5*dt*ivel*jsnap.unit['km']
             neighbors = cut_sphere(jgals, igal['x'], igal['y'], igal['z'], radii, both_sphere=True)
             self.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} in radii")
-            if len(neighbors) > nfat:
-                _, checkpart = self.data.load_gal(iout, igal['id'], return_part=True, prefix=prefix)
+            
             
             if len(neighbors)>0: # candidates at jout
                 neighbors = neighbors[neighbors['m'] >= igal['m']*masscut_percent/100]
                 self.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} after masscut {masscut_percent} percent")
                 if len(neighbors) > nfat:
+                    _, checkpid = self.data.load_gal(iout, igal['id'], return_part=True, prefix=prefix)
+
                     rate = np.zeros(len(neighbors))
                     gals, gmpids = self.data.load_gal(jout, neighbors['id'], return_part=True, prefix=prefix)
                     iout, istep = ioutistep(igal, galaxy=self.galaxy, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep)
                     ith = 0
                     for _, gmpid in zip(gals, gmpids):
-                        if atleast_numba(checkpart, gmpid):
-                            ind = large_isin(checkpart, gmpid)
-                            rate[ith] = howmany(ind, True)/len(checkpart)
+                        if atleast_numba(checkpid, gmpid):
+                            ind = large_isin(checkpid, gmpid)
+                            rate[ith] = howmany(ind, True)/len(checkpid)
                         ith += 1
                     ind = rate>0
 
@@ -175,7 +194,7 @@ class Leaf():
                     else:
                         njump = 0
                         # self.fatids=True
-                        self.branch.update_cands(iout, fatids, checkids=self.part['id'], prefix=prefix) # -> update self.branch.candidates & self.branch.scores
+                        self.branch.update_cands(iout, fatids, checkids=self.pid, prefix=prefix) # -> update self.branch.candidates & self.branch.scores
                         igals = self.data.load_gal(iout, fatids, return_part=False, prefix=prefix)
 
             clock.done()
@@ -191,22 +210,38 @@ class Leaf():
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
 
         timekeys = self.branch.candidates.keys()
-        for tout in timekeys:
-            checkpart = self.part
+        checkpid = self.pid
+        igyr = self.data.load_snap(self.iout, prefix=prefix).params['age']
+        allcands = tuple( self.branch.candidates[tout][key] for tout in timekeys for key in self.branch.candidates[tout].keys() )
+        nums = [len(self.branch.candidates[tout]) for tout in timekeys]
+        nums = np.insert(np.cumsum(nums),0,0)
+        ind0ss = self.atleast_leaf(allcands, self.branch.inipid)
+        for tth, tout in enumerate(timekeys):
+            candidates = self.branch.candidates[tout]
+            ind0s = [ ind0ss[nums[tth]:nums[tth+1]] ]
             if self.galaxy:
                 tgyr = self.data.load_snap(tout, prefix=prefix).params['age']
-                igyr = self.data.load_snap(self.iout, prefix=prefix).params['age']
-                candidates = self.branch.candidates[tout]
-                checkpart = self.part[ self.part['age','Gyr'] >= (igyr-tgyr) ]
+                ageind = self.page >= (igyr-tgyr)
+                checkpid = self.pid[ ageind ]
+                checkwei = self.pweight[ ageind ]
+
+            if len(candidates.keys())>0:
+                ind1s = self.atleast_leaf(candidates.values(), checkpid)
+            
+            ith = 0
             for i, ileaf in candidates.items():
                 try:
-                    score0 = self.calc_matchrate(ileaf, checkpart=self.branch.inipart, prefix=prefix)
-                    score1 = self.calc_matchrate(ileaf, checkpart=checkpart, prefix=prefix) # importance weighted matchrate
+                    score0 = -1
+                    if ind0s[ith]:
+                        score0 = self.calc_matchrate(ileaf, checkpid=self.branch.inipid, weight=self.branch.inipwei, prefix=prefix)
+                    score1 = -1
+                    if ind1s[ith]:
+                        score1 = self.calc_matchrate(ileaf, checkpid=checkpid, weight=checkwei, prefix=prefix) # importance weighted matchrate
                     score2 = 0  # Velocity offset
                     score3 = 0
                     if score1 > 0 or score0 > 0:
                         if self.interplay:
-                            score1 *= self.calc_matchrate(self, checkpart=ileaf.part, prefix=prefix)
+                            score1 *= self.calc_matchrate(self, checkpid=ileaf.pid, weight=ileaf.pweight, prefix=prefix)
                         score2 = self.calc_velocity_offset(ileaf, prefix=prefix)
                         score3 = np.exp( -np.abs(np.log10(self.gal_gm['m']/ileaf.gal_gm['m'])) )   # Mass difference
                 except Warning as e:
@@ -214,8 +249,6 @@ class Leaf():
                     breakpoint()
                     self.debugger.warning("########## WARNING #########")
                     self.debugger.warning(e)
-                    self.debugger.warning(f"len parts {len(checkpart['m'])}")
-                    self.debugger.warning(f"dtype {checkpart.dtype}")
                     self.debugger.warning(self.summary())
                     raise ValueError("velocity wrong!")
                 self.branch.scores[tout][i] += score0+score1+score2+score3
@@ -223,79 +256,90 @@ class Leaf():
                 self.branch.score1s[tout][i] += score1
                 self.branch.score2s[tout][i] += score2
                 self.branch.score3s[tout][i] += score3
+                ith += 1
 
         clock.done()
 
-
-    def calc_matchrate(self, otherleaf, checkpart=None, prefix=""):
-        # Subject to `calc_score`
+    def atleast_leaf(self, otherleaves, checkpid, prefix=""):
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
-        clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
+        clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger, level='debug')
 
-        if checkpart is None:
-            checkpart = self.part
+        ids = tuple(otherleaf.pid for otherleaf in otherleaves)
+        val = atleast_numba_para(ids, checkpid)
+
+        clock.done()
+        return val # True or False
+
+    def calc_matchrate(self, otherleaf, checkpid=None, weight=None, prefix=""):
+        # Subject to `calc_score` BOTTLENECK!!
+        func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
+        clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger, level='debug')
+
+        if checkpid is None:
+            checkpid = self.pid
             if self.galaxy:
                 tgyr = self.data.load_snap(otherleaf.iout, prefix=prefix).params['age']
                 igyr = self.data.load_snap(self.iout, prefix=prefix).params['age']
-                checkpart = self.part[ self.part['age','Gyr'] >= (igyr-tgyr) ]
-        if atleast_numba(checkpart['id'], otherleaf.part['id']):
-            ind = large_isin(checkpart['id'], otherleaf.part['id'])
-        else:
-            clock.done(add=f"({len(checkpart['id'])} vs {len(otherleaf.part['id'])})")
+                checkpid = self.pid[ self.page >= (igyr-tgyr) ]
+        
+        if otherleaf.nparts < len(checkpid)/200:
             return -1
-        clock.done(add=f"({len(checkpart['id'])} vs {len(otherleaf.part['id'])})")
-        return np.sum( checkpart['m'][ind]/checkpart['dist'][ind] ) / np.sum( checkpart['m']/checkpart['dist'] )
+
+        # if atleast_numba(checkpid, otherleaf.pid):
+        #     ind = large_isin(checkpid, otherleaf.pid)
+        # else:
+        #     clock.done(add=f"({len(checkpid)} vs {otherleaf.nparts})")
+        #     return -1
+        ind = large_isin(checkpid, otherleaf.pid)
+        clock.done(add=f"({len(checkpid)} vs {otherleaf.nparts})")
+        return np.sum( weight[ind] ) / np.sum( weight )
 
 
-    def calc_bulkmotion(self, checkpart=None, useold=False, prefix="", **kwargs):
+    def calc_bulkmotion(self, checkind=None, prefix="", **kwargs):
         # Subject to `calc_velocity_offset`
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
-        # clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
-        
-        if (useold) and (self.refv is not None):
-            # clock.done()
-            return self.refv
+        clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger, level='debug')
 
-        switch = False
-        if checkpart is None:
-            switch = True
-            checkpart = self.part
+
+        if checkind is None:
+            checkind = np.full(self.nparts, True)
 
         try:
-            vx = np.average(checkpart['vx', 'km/s'], weights=checkpart['m']/checkpart['dist'])
-            vy = np.average(checkpart['vy', 'km/s'], weights=checkpart['m']/checkpart['dist'])
-            vz = np.average(checkpart['vz', 'km/s'], weights=checkpart['m']/checkpart['dist'])
-            if switch:
-                self.refv = np.array([vx,vy,vz])
+            weights = self.pweight[checkind]
+            weights /= np.sum(weights)
+            vx = np.convolve( self.pvx[checkind], weights[::-1], mode='valid' )[0]
+            vy = np.convolve( self.pvy[checkind], weights[::-1], mode='valid' )[0]
+            vz = np.convolve( self.pvz[checkind], weights[::-1], mode='valid' )[0]
+
         except Warning as e:
             print("WARNING!! in calc_bulkmotion")
             breakpoint()
             self.debugger.warning("########## WARNING #########")
             self.debugger.warning(e)
-            self.debugger.warning(f"len parts {len(checkpart['m'])}")
-            self.debugger.warning(f"dtype {checkpart.dtype}")
             self.debugger.warning(self.summary())
             raise ValueError("velocity wrong!")
 
-        # clock.done(add=f"({len(checkpart['id'])})")
+        clock.done(add=f"({howmany(checkind, True)})")
         return np.array([vx, vy, vz])
 
     
     def calc_velocity_offset(self, otherleaf, prefix="", **kwargs):
         # Subject to `calc_score`
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
-        clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
+        clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger, level='debug')
 
-        ind = large_isin(otherleaf.part['id'], self.part['id'])
+        ind = large_isin(otherleaf.pid, self.pid)
         if howmany(ind, True) < 3:
-            clock.done(add=f"({len(self.part['id'])} vs {howmany(ind, True)})")
+            clock.done(add=f"({self.nparts} vs {howmany(ind, True)})")
             return 0
         else:
-            refv = self.calc_bulkmotion(useold=True, prefix=prefix)
-            instar = otherleaf.part[ind]
-            inv = self.calc_bulkmotion(checkpart=instar, prefix=prefix) - refv
-            totv = np.array([otherleaf.gal_gm['vx'], otherleaf.gal_gm['vy'], otherleaf.gal_gm['vz']]) - refv
+            # refv = self.calc_bulkmotion(useold=True, prefix=prefix)         # selfvel
+            refv = np.array([self.gal_gm['vx'], self.gal_gm['vy'], self.gal_gm['vz']])
+            inv = otherleaf.calc_bulkmotion(checkind=ind, prefix=prefix) - refv  # invel at self-coo
+            # self.debugger.debug(f"gal{refv}, ref{inv}")
+            totv = np.array([otherleaf.gal_gm['vx'], otherleaf.gal_gm['vy'], otherleaf.gal_gm['vz']]) - refv # totvel at self-coo
+            # self.debugger.debug(f"gal{otherleaf.gal_gm[['vx','vy','vz']]}, ref{totv}")
 
-        clock.done(add=f"({len(self.part['id'])} vs {howmany(ind, True)})")
+        clock.done(add=f"({self.nparts} vs {howmany(ind, True)})")
         # return 1 - np.sqrt( np.sum((totv - inv)**2) )/(np.linalg.norm(inv)+np.linalg.norm(totv))
-        return 1 - nbnorm(totv - inv) / (nbnorm(inv)+nbnorm(totv))
+        return 1 - nbnorm(totv - inv)/(nbnorm(inv)+nbnorm(totv))
