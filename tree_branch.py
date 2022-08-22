@@ -190,7 +190,7 @@ class Branch():
             self.score3s[iout] = {}
 
         if not gal['id'] in self.candidates[iout].keys():
-            func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
+            # func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
             # clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
             
             self.debugger.debug(f"{prefix} *** no id{gal['id']} in candidates at iout{iout} --> make it!")
