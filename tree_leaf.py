@@ -188,14 +188,14 @@ class Leaf():
                     if len(fatids) == 0:
                         self.debugger.info("JUMP!!")
                         njump += 1
-
-                        # if not self.fatids:
-                        #     self.fatids=False
                     else:
-                        njump = 0
-                        # self.fatids=True
                         fatids = self.branch.update_cands(iout, fatids, checkids=self.pid, prefix=prefix) # -> update self.branch.candidates & self.branch.scores
-                        igals = self.data.load_gal(iout, fatids, return_part=False, prefix=prefix)
+                        if len(fatids) == 0:
+                            self.debugger.info("JUMP!!")
+                            njump += 1
+                        else:
+                            njump = 0
+                            igals = self.data.load_gal(iout, fatids, return_part=False, prefix=prefix)
 
             clock.done()
         keys = list(self.fatids.keys())
