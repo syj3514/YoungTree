@@ -6,108 +6,140 @@ from rur import uri, uhmi
 
 from tree_utool import *
 from tree_root import Treebase
+import params as p
 
 #########################################################
 ###############         Targets                ##########
 #########################################################
-Data = None
-gc.collect()
-print(f"\n>>> Current Memory: {psutil.Process().memory_info().rss / 2 ** 30:.4f} GB")
-mode = input("\n>>> Mode=? (hagn, yxxxxx, nh..)")
-repo, rurmode = mode2repo(mode)
+# p.mode = input("\n>>> p.mode=? (hagn, yxxxxx, nh..)")
+modenames = {"hagn": "Horizon-AGN", 
+            "y01605": "YZiCS-01605",
+            "y04466": "YZiCS-04466",
+            "y05420": "YZiCS-05420",
+            "y05427": "YZiCS-05427",
+            "y06098": "YZiCS-06098",
+            "y07206": "YZiCS-07206",
+            "y10002": "YZiCS-10002",
+            "y17891": "YZiCS-17891",
+            "y24954": "YZiCS-24954",
+            "y29172": "YZiCS-29172",
+            "y29176": "YZiCS-29176",
+            "y35663": "YZiCS-35663",
+            "y36413": "YZiCS-36413",
+            "y36415": "YZiCS-36415",
+            "y39990": "YZiCS-39990",
+            "y49096": "YZiCS-49096",
+            "nh": "NewHorizon"}
+if not p.mode in modenames.keys():
+    raise ValueError(f"mode={p.mode} is not supported!")
+modename = modenames[p.mode]
+repo, rurmode = mode2repo(p.mode)
 
-ans = input("\n>>> Use galaxy? ")
-galaxy=False
+# ans = input("\n>>> Use galaxy? ")
 galstr = "Halo"
-trues = ["True", "T", "true", "yes", "y", "Y", "Yes"]
-if ans in trues:
-    galaxy=True
+galstrs = "Halos"
+if p.galaxy:
     galstr = "Galaxy"
+    galstrs = "Galaxies"
 
-nout = load_nout(mode, galaxy=galaxy)
+nout = load_nout(p.mode, galaxy=p.galaxy)
 
-prefix = f"[{mode} ({galstr})]"
-print(f"{prefix} {nout[-1]} ~ {nout[0]}")
-iout = 0
-while not iout in nout:
-    iout = int( input(">>> Choose iout ") )
+# print(f"{prefix} {nout[-1]} ~ {nout[0]}")
+if p.iout == -1:
+    p.iout = nout[0]
 
-print(f"\n{prefix} targets load..."); ref = time.time()
-# iout = np.max(nout)
-uri.timer.verbose = 0
-snap_now = uri.RamsesSnapshot(repo, iout, path_in_repo='snapshots', mode=rurmode )
-gals_now = uhmi.HaloMaker.load(snap_now, galaxy=True)
-printtime(ref, f"{prefix} {len(gals_now)} gals (at iout={iout}) load done")
-snap_now.clear()
-print(f"\n>>> Current Memory: {psutil.Process().memory_info().rss / 2 ** 30:.4f} GB")
-
-ans = input("\n>>> Use all? (`all`, or specific ID)")
-if ans == 'all':
-    print("All galaxies")
-    targets = gals_now
-    loadall = True
-else:
-    print(f"Galaxy ID={ans}")
-    targets = gals_now[int(ans)-1]
-    printgal(targets, mode=mode)
-    loadall = False
-targets = np.atleast_1d(targets)
-
-fnames = [f"Branch_{mode}_ID{target['id']:07d}_iout{iout:05d}.pickle" for target in targets]
-ind = np.isin(fnames, os.listdir("./data"))
-
-if howmany(ind,True)>0:
-    ans = input(f"\n>>> I find {howmany(ind, True)} of {len(targets)} saved files! Do you want to exclude them?")
-    if ans in trues:
-        targets = targets[~ind]
-        print(f"Ok, I'll calculate {len(targets)} gals")
-
-
+progstr = "Descendant"
+if p.prog:
+    progstr = "Progenitor"
+message = f"< YoungTree >\nfinding {progstr}s\nUsing {modename} {galstr}\n{len(nout)} outputs are found! ({nout[-1]}~{nout[0]})\n"
 #########################################################
 ###############         Debugger                #########
 #########################################################
-# import warnings
-# warnings.simplefilter('error')
-
 debugger = None
-fname = f"./output_{mode}.log"
-ans = input(f"\n>>> Log file will be saved in `{fname}`. Agree? ")
-if not ans in trues:
-    fname = input(f"\n>>> Type new name (ex: ./output_dev.log) ")
+fname = f"./{p.logname}.log"
 if os.path.isfile(fname):
-    os.remove(fname)
-debugger = logging.getLogger(f"YoungTree_{mode}")
+    num = 1
+    while os.path.isfile(fname):
+        fname = f"./{p.logname}({num}).log"
+        num += 1
+debugger = logging.getLogger(f"YoungTree_{p.mode}")
 debugger.handlers = []
-ans = input("\n>>> Detail debugging? ")
-if ans in trues:
-    print("DEBUG level")
+if p.detail:
     debugger.setLevel(logging.DEBUG)
 else:
-    print("INFO level")
     debugger.setLevel(logging.INFO)
 formatter = logging.Formatter(u'%(asctime)s [%(levelname)8s] %(message)s')
 file_handler = logging.FileHandler(fname, mode='a')
 file_handler.setFormatter(formatter)
 debugger.addHandler(file_handler)
 debugger.propagate = False
-debugger.debug("Debug Start")
-print(f"\n>>> Current Memory: {psutil.Process().memory_info().rss / 2 ** 30:.4f} GB")
+debugger.info("Debug Start")
+
+debugger.info(message)
+print(message)
+
+if not p.iout in nout:
+    raise ValueError(f"iout={p.iout} is not in nout!")
+
+uri.timer.verbose = 0
+snap_now = uri.RamsesSnapshot(repo, p.iout, path_in_repo='snapshots', mode=rurmode )
+gals_now = uhmi.HaloMaker.load(snap_now, galaxy=True)
+snap_now.clear()
+
+if p.usegals == 'all':
+    targets = gals_now
+    message = f"All {galstrs}\n>>> {len(targets)} {galstrs} are loaded"
+    loadall = True
+else:
+    loadall = False
+    if isinstance(p.usegals, int):
+        message = f"Single {galstr}\n>>> {galstr} (ID={p.usegals}) is loaded"
+        targets = gals_now[p.usegals - 1]
+    elif isinstance(p.usegals, list):
+        message = f"Multiple {galstrs}\n>>> {len(p.usegals)} {galstrs} are loaded\n\t(IDs={''.join([f'{p.usegals[i]}, ' if i<min(3,len(p.usegals)) else f', {p.usegals[i]}' if (i>max(3,len(p.usegals))-3) else '...' if i==min(3,len(p.usegals)) else '' for i in range(len(p.usegals))])})"
+        ind = np.array(p.usegals, dtype=int)
+        targets = gals_now[ind - 1]
+    elif isinstance(p.usegals, tuple):
+        mmin, mmax = p.usegals
+        targets = gals_now[(gals_now['m'] >= mmin) & (gals_now['m'] < mmax)]
+        ids = targets['id']
+        message = f"Mass range: {np.log10(mmin):.2f} ~ {np.log10(mmax):.2f}\n>>> {len(targets)} {galstrs} are loaded\n\t(ID={''.join([f'{ids[i]}, ' if i<min(3,len(ids)) else f', {ids[i]}' if (i>max(3,len(ids))-3) else '...' if i==min(3,len(ids)) else '' for i in range(len(ids))])})"
+    else:
+        raise TypeError(f"Couldn't understand type of `usegals` ({type(p.usegals)}) in params.py!")
+    targets = np.atleast_1d(targets)
+
+debugger.info(message)
+print(message)
+
+if not os.path.isdir(f"./result/{p.mode}"):
+    os.mkdir("./result/{p.mode}")
+
+if p.overwrite:
+    fnames = [f"./result/{p.mode}/{progstr}_Branch_ID{target['id']:07d}_iout{p.iout:05d}.pickle" for target in targets]
+    ind = np.isin(fnames, os.listdir("./data"))    
+    if howmany(ind,True)>0:
+        debugger.info(f"I find {howmany(ind, True)} of {len(targets)} saved files! --> Use {howmany(ind, False)} {galstrs}\n")
+        print(f"I find {howmany(ind, True)} of {len(targets)} saved files! --> Use {howmany(ind, False)} {galstrs}\n")
+        targets = targets[~ind]
+else:
+    debugger.info(" ")
+    print()
+        
+
+
 
 #########################################################
 ###############         Tree Making                ######
 #########################################################
-flush_GB = 10 + 0.3*len(targets)
+debugger.info(f"Allow {p.flush_GB:.2f} GB Memory")
+print(f"Allow {p.flush_GB:.2f} GB Memory")
 
-print(f"\n>>> Current Memory: {psutil.Process().memory_info().rss / 2 ** 30:.4f} GB")
+MyTree = Treebase(simmode=p.mode, debugger=debugger, verbose=0, flush_GB=p.flush_GB, loadall=loadall, prog=p.prog)
 
-if mode == 'nh':
-    flush_GB *= 10
-print(f"Allow {flush_GB:.2f} GB Memory")
-MyTree = Treebase(simmode=mode, debugger=debugger, verbose=0, flush_GB=flush_GB, loadall=loadall)
-print(f"\n\nSee {fname}\n\nRunning...\n")
+print(f"\n\nSee {fname} (detail debugging = {p.detail})\n\nRunning...\n\n")
 
 #########################################################
 ###############         Execution                ########
 #########################################################
-MyTree.queue(iout, targets)
+MyTree.queue(p.iout, targets)
 print("\nDone\n")

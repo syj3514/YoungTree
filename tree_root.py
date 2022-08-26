@@ -23,8 +23,8 @@ class Treebase():
                 'partstr', 'Partstr', 'galstr', 'Galstr','verbose', 'debugger',
                 'rurmode', 'repo',
                 'loadall','nout','nstep',
-                'dict_snap','dict_part','dict_gals','dict_leaves','branches_queue']
-    def __init__(self, simmode='hagn', galaxy=True, flush_GB=50, verbose=2, debugger=None, loadall=False, prefix=""):
+                'dict_snap','dict_part','dict_gals','dict_leaves','branches_queue', 'prog']
+    def __init__(self, simmode='hagn', galaxy=True, flush_GB=50, verbose=2, debugger=None, loadall=False, prefix="", prog=True):
         func = f"[__Treebase__]"; prefix = f"{prefix}{func}"
         clock = timer(text=prefix, verbose=verbose, debugger=debugger)
 
@@ -66,6 +66,7 @@ class Treebase():
         self.dict_leaves = {} # in {iout}, in {galid}, Leaf object
         # self.saved_out = {"snap":[], "gal":[], "part":[]}
         self.branches_queue = {}
+        self.prog = prog
         gc.collect()
 
         clock.done()
@@ -109,7 +110,7 @@ class Treebase():
         gals = self.load_gal(iout, galid=galids, prefix=prefix)
 
         for gal in gals:
-            self.branches_queue[gal['id']]=Branch(gal, self, galaxy=self.galaxy, mode=self.simmode, verbose=self.verbose, prefix=prefix, debugger=self.debugger, interplay=False)
+            self.branches_queue[gal['id']]=Branch(gal, self, galaxy=self.galaxy, mode=self.simmode, verbose=self.verbose, prefix=prefix, debugger=self.debugger, interplay=False, prog=self.prog)
 
         clock.done()
 
@@ -117,12 +118,18 @@ class Treebase():
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
 
-        self.make_branches(iout, gals['id'], interplay=False, prefix=prefix)
+        self.nout = self.nout[self.nout<=iout] if self.prog else self.nout[self.nout>=iout]
+
+        self.make_branches(iout, gals['id'], interplay=interplay, prefix=prefix)
         self.debugger.info(f"{prefix}\n{self.summary()}")
         try:
             go=True
             ntree = 1
-            for jout in self.nout:
+            if self.prog:
+                outs = self.nout
+            else:
+                outs = self.nout[::-1]
+            for jout in outs:
                 keys = list( self.branches_queue.keys() )
                 for key in keys:
                     go = False
@@ -152,37 +159,27 @@ class Treebase():
 
         clock.done()
 
-
-    # def check_outs(self, prefix=""):
-    #     func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
-    #     # clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
-
-    #     self.saved_out["snap"] = list(self.dict_snap.keys())
-    #     self.saved_out["gal"] = list(self.dict_gals["galaxymakers"].keys())
-    #     self.saved_out["part"] = list(self.dict_part.keys())
-    #     # clock.done()
-
     def flush_auto(self, prefix=""):
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
         reftot = MB()
 
-        cout = -1
+        cout = -1 if self.prog else 10000
         keys = list( self.dict_snap.keys() )
         if len(keys)>0:
-            cout = max(np.min(keys), cout)
+            cout = max(np.min(keys), cout) if self.prog else min(np.max(keys), cout)
         keys = list( self.dict_gals["galaxymakers"].keys() )
         if len(keys)>0:
-            cout = max(np.min(keys), cout)
+            cout = max(np.min(keys), cout) if self.prog else min(np.max(keys), cout)
         keys = list( self.dict_part.keys() )
         if len(keys)>0:
-            cout = max(np.min(keys), cout)
+            cout = max(np.min(keys), cout) if self.prog else min(np.max(keys), cout)
         
         # Snapshot
         keys = list( self.dict_snap.keys() )
         if len(keys)>0:
             for iout in keys:
-                if iout > cout+4:
+                if (iout > cout+4 and self.prog) or (iout < cout+4 and not self.prog):
                     refmem = MB()
                     self.dict_snap[iout].clear()
                     self.dict_snap[iout] = None
@@ -193,7 +190,7 @@ class Treebase():
         keys = list( self.dict_gals["galaxymakers"].keys() )
         if len(keys)>0:
             for iout in keys:
-                if iout > cout+4:
+                if (iout > cout+4 and self.prog) or (iout < cout+4 and not self.prog):
                     refmem = MB()
                     self.dict_gals['galaxymakers'][iout] = None
                     self.dict_gals['gmpids'][iout] = None
@@ -205,7 +202,7 @@ class Treebase():
         keys = list( self.dict_part.keys() )
         if len(keys)>0:
             for iout in keys:
-                if iout > cout+4:
+                if (iout > cout+4 and self.prog) or (iout < cout+4 and not self.prog):
                     jkeys = list(self.dict_part[iout].keys())
                     for galid in jkeys:
                         refmem = MB()
@@ -224,7 +221,7 @@ class Treebase():
         keys = list( self.dict_leaves.keys() )
         if len(keys)>0:
             for iout in keys:
-                if iout > cout+4:
+                if (iout > cout+4 and self.prog) or (iout < cout+4 and not self.prog):
                     jkeys = list(self.dict_leaves[iout].keys())
                     for galid in jkeys:
                         if len(self.dict_leaves[iout][galid].parents)==0:
@@ -314,7 +311,7 @@ class Treebase():
             # clock2 = timer(text=prefix+"[GalaxyMaker load]", verbose=self.verbose, debugger=self.debugger)
             if gal is None:
                 gal = self.load_gal(iout, galid, prefix=prefix)
-            self.dict_leaves[iout][galid] = Leaf(gal, branch, self, verbose=self.verbose-1, prefix=prefix, debugger=self.debugger, interplay=branch.interplay)
+            self.dict_leaves[iout][galid] = Leaf(gal, branch, self, verbose=self.verbose-1, prefix=prefix, debugger=self.debugger, interplay=branch.interplay, prog=self.prog)
         
         if not branch.root['id'] in self.dict_leaves[iout][galid].parents:
             self.dict_leaves[iout][galid].branch = branch
