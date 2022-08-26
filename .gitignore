@@ -5,6 +5,7 @@ youngtree_test_backup.ipynb
 **/__pycache__/**
 **/data/**
 **/images/**
+**/result/**
 *test*
 youngtree_test.ipynb
 *_excution.py
