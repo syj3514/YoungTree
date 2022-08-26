@@ -107,7 +107,7 @@ class Leaf():
         clock.done()
     
 
-    def load_fatids(self, igals, njump=0, masscut_percent=1, nfat=5, prefix="", **kwargs):
+    def load_fatids(self, igals, njump=0, masscut_percent=1, nfat=5, prefix="", **kwargs): # MAIN BOTTLENECK!!
         # Subject to `find_candidates`
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
@@ -205,7 +205,7 @@ class Leaf():
         return temp > 0
     
 
-    def calc_score(self, prefix=""):
+    def calc_score(self, prefix=""):    # MAIN BOTTLENECK!!
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
 

@@ -28,13 +28,16 @@ nout = load_nout(mode, galaxy=galaxy)
 
 prefix = f"[{mode} ({galstr})]"
 print(f"{prefix} {nout[-1]} ~ {nout[0]}")
+iout = 0
+while not iout in nout:
+    iout = int( input(">>> Choose iout ") )
 
 print(f"\n{prefix} targets load..."); ref = time.time()
-iout = np.max(nout)
+# iout = np.max(nout)
 uri.timer.verbose = 0
 snap_now = uri.RamsesSnapshot(repo, iout, path_in_repo='snapshots', mode=rurmode )
 gals_now = uhmi.HaloMaker.load(snap_now, galaxy=True)
-printtime(ref, f"{prefix} {len(gals_now)} gals load done")
+printtime(ref, f"{prefix} {len(gals_now)} gals (at iout={iout}) load done")
 snap_now.clear()
 print(f"\n>>> Current Memory: {psutil.Process().memory_info().rss / 2 ** 30:.4f} GB")
 
@@ -50,7 +53,7 @@ else:
     loadall = False
 targets = np.atleast_1d(targets)
 
-fnames = [f"Branch_{mode}_{target['id']:05d}.pickle" for target in targets]
+fnames = [f"Branch_{mode}_ID{target['id']:07d}_iout{iout:05d}.pickle" for target in targets]
 ind = np.isin(fnames, os.listdir("./data"))
 
 if howmany(ind,True)>0:
@@ -94,6 +97,9 @@ print(f"\n>>> Current Memory: {psutil.Process().memory_info().rss / 2 ** 30:.4f}
 ###############         Tree Making                ######
 #########################################################
 flush_GB = 10 + 0.3*len(targets)
+
+print(f"\n>>> Current Memory: {psutil.Process().memory_info().rss / 2 ** 30:.4f} GB")
+
 if mode == 'nh':
     flush_GB *= 10
 print(f"Allow {flush_GB:.2f} GB Memory")
