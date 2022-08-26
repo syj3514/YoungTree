@@ -111,8 +111,10 @@ else:
 debugger.info(message)
 print(message)
 
+if not os.path.isdir(f"./result"):
+    os.mkdir(f"./result")
 if not os.path.isdir(f"./result/{p.mode}"):
-    os.mkdir("./result/{p.mode}")
+    os.mkdir(f"./result/{p.mode}")
 
 if p.overwrite:
     fnames = [f"./result/{p.mode}/{progstr}_Branch_ID{target['id']:07d}_iout{p.iout:05d}.pickle" for target in targets]
