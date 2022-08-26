@@ -265,13 +265,14 @@ class Treebase():
         if not iout in self.dict_gals["galaxymakers"].keys():
             func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
             snap = self.load_snap(iout, prefix=prefix)
-            gm, gmpid = uhmi.HaloMaker.load(snap, galaxy=self.galaxy, load_parts=True, copy=True) #<-- Bottleneck!
+            gm, temp = uhmi.HaloMaker.load(snap, galaxy=self.galaxy, load_parts=True) #<-- Bottleneck!
+            gmpid = np.array(temp)
             self.dict_gals["galaxymakers"][iout] = gm
             cumparts = np.insert(np.cumsum(gm["nparts"]), 0, 0)
             # gmpid = [gmpid[ cumparts[i]:cumparts[i+1] ] for i in range(len(gm))]
             gmpid = tuple(gmpid[ cumparts[i]:cumparts[i+1] ] for i in range(len(gm)))
             self.dict_gals["gmpids"][iout] = gmpid #<-- Bottleneck!
-            del gm; del gmpid; del cumparts
+            del gm; del gmpid; del cumparts; del temp
             gc.collect()
             if self.loadall:
                 self.debugger.info(f"{prefix} *** loadall=True: loadall {self.partstr}s...")

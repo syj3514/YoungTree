@@ -60,7 +60,7 @@ fname = f"./{p.logname}.log"
 if os.path.isfile(fname):
     num = 1
     while os.path.isfile(fname):
-        fname = f"./{p.logname}({num}).log"
+        fname = f"./{p.logname}_{num}.log"
         num += 1
 debugger = logging.getLogger(f"YoungTree_{p.mode}")
 debugger.handlers = []
@@ -133,12 +133,14 @@ else:
 #########################################################
 ###############         Tree Making                ######
 #########################################################
-debugger.info(f"Allow {p.flush_GB:.2f} GB Memory")
+debugger.info(f"\nAllow {p.flush_GB:.2f} GB Memory")
 print(f"Allow {p.flush_GB:.2f} GB Memory")
 
 MyTree = Treebase(simmode=p.mode, debugger=debugger, verbose=0, flush_GB=p.flush_GB, loadall=loadall, prog=p.prog)
 
-print(f"\n\nSee {fname} (detail debugging = {p.detail})\n\nRunning...\n\n")
+
+destination = np.min(nout) if p.prog else np.max(nout)
+print(f"\nStart making {progstr} from {p.iout} to {destination}\nSee {fname} (detail debugging = {p.detail})\nRunning...\n\n")
 
 #########################################################
 ###############         Execution                ########
