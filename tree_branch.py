@@ -269,6 +269,7 @@ class Branch():
 
         if iout != self.rootout: # Skip start iout
             if jout==iout:
+                self.debugger.debug(f"** [choose_winner] **********************************")
 
                 winid=0; winscore=0
                 for iid, iscore in self.scores[iout].items():
@@ -317,6 +318,7 @@ class Branch():
                     if len(self.candidates[ikey].keys())<1:
                         del self.candidates[ikey]
                         del self.scores[ikey]
+                self.debugger.debug(f"** [choose_winner] **********************************")
         else:
             del self.candidates[iout]
 
