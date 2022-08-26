@@ -32,7 +32,7 @@ prog = True
 #       ID list:  Specific several galaxies
 #       tuple:    Use galaxies mass range (minmass, maxmass)
 #usegals = 'all'
-usegals = 1
+usegals = [57, 96, 233, 162, 274, 297, 326, 404, 511, 443]
 
 #   [overwrite]
 #   If tree results already exist, overwrite or not?

@@ -17,6 +17,7 @@ class Branch():
 
         self.data = DataObj
         self.root = root
+        self.rootid = root['id']
         self.galaxy = galaxy
         self.mode = mode
         self.rootout, self.rootstep = ioutistep(self.root, galaxy=self.galaxy, mode=self.mode, nout=self.data.nout)
@@ -60,10 +61,10 @@ class Branch():
         clock.done()
     
     def __del__(self):
-        self.debugger.info(f"[DEL] Branch (root={self.root['id']}) is destroyed")
+        self.debugger.info(f"[DEL] Branch (root={self.rootid}) is destroyed")
 
     def clear(self, msgfrom='self'):
-        self.debugger.info(f"[CLEAR] Branch (root={self.root['id']}) [from {msgfrom}]")
+        self.debugger.info(f"[CLEAR] Branch (root={self.rootid}) [from {msgfrom}]")
         self.inipid = None; self.inipwei=None
         self.data = None
         self.root = None
@@ -72,7 +73,7 @@ class Branch():
         self.leaves = {}
 
     def selfsave(self):
-        a = self.root['id']
+        a = self.rootid
         b = self.secrecord
         c = self.leaves
         d = self.leave_scores
@@ -174,8 +175,8 @@ class Branch():
                 ids = list( self.candidates[key].keys() )
                 for iid in ids:
                     refmem = MB()
-                    self.candidates[key][iid].parents.remove(self.root['id'])
-                    self.debugger.debug(f"*** Branch({self.root['id']}) connection lost to Leaf({iid} at {key})")
+                    self.candidates[key][iid].parents.remove(self.rootid)
+                    self.debugger.debug(f"*** Branch({self.rootid}) connection lost to Leaf({iid} at {key})")
                     self.candidates[key][iid].clear(msgfrom="reset_branch")
                     del self.candidates[key][iid]
                     self.debugger.debug(f"* [Branch][Reset] remove {iid} leaf at iout={key} ({refmem-MB():.2f} MB saved)")
@@ -284,7 +285,7 @@ class Branch():
                     self.debugger.debug(f"** [Choose_winner] candidates\n{self.candidates}")
                     self.debugger.debug(f"** [Choose_winner] winid={winid}, winscore={winscore}")
                     self.debugger.debug(f"** [Choose_winner] root leaf {self.rootleaf.gal_gm['id']} at {self.rootleaf.gal_gm['timestep']}")
-                    self.rootleaf.parents.remove(self.root['id'])
+                    self.rootleaf.parents.remove(self.rootid)
                     self.rootleaf = self.candidates[iout][winid]
                     self.debugger.debug(f"** [Choose_winner] root leaf --> {self.rootleaf.gal_gm['id']} at {self.rootleaf.gal_gm['timestep']}")
                     self.go = self.rootleaf.find_candidates(prefix=prefix)
@@ -295,8 +296,8 @@ class Branch():
                 for iid in ids:
                     refmem = MB()
                     if iid != winid:
-                        self.candidates[iout][iid].parents.remove(self.root['id'])
-                        # self.debugger.debug(f"*** Branch({self.root['id']}) connection lost to Leaf({iid} at {iout})")
+                        self.candidates[iout][iid].parents.remove(self.rootid)
+                        # self.debugger.debug(f"*** Branch({self.rootid}) connection lost to Leaf({iid} at {iout})")
                     del self.candidates[iout][iid]
                     del self.scores[iout][iid]
                     self.debugger.debug(f"** [Choose_winner] remove ID={iid} leaf&score at iout={iout} ({refmem-MB():.2f} MB saved)")
@@ -310,8 +311,8 @@ class Branch():
                         if self.scores[ikey][jkey] <= -1:
                             self.debugger.debug(f"** [Choose_winner] iout={ikey}, ID={jkey}, score={self.scores[ikey][jkey]}")
                             refmem = MB()
-                            self.candidates[ikey][jkey].parents.remove(self.root['id'])
-                            # self.debugger.debug(f"*** Branch({self.root['id']}) connection lost to Leaf({iid} at {iout})")
+                            self.candidates[ikey][jkey].parents.remove(self.rootid)
+                            # self.debugger.debug(f"*** Branch({self.rootid}) connection lost to Leaf({iid} at {iout})")
                             del self.candidates[ikey][jkey]
                             del self.scores[ikey][jkey]
                             self.debugger.debug(f"** [Choose_winner] remove non-referred ID={jkey} leaf&score at iout={ikey} ({refmem-MB():.2f} MB saved)")

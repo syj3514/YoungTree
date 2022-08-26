@@ -179,7 +179,7 @@ class Treebase():
         keys = list( self.dict_snap.keys() )
         if len(keys)>0:
             for iout in keys:
-                if (iout > cout+4 and self.prog) or (iout < cout+4 and not self.prog):
+                if (iout > cout+5 and self.prog) or (iout < cout-5 and not self.prog):
                     refmem = MB()
                     self.dict_snap[iout].clear()
                     self.dict_snap[iout] = None
@@ -190,7 +190,7 @@ class Treebase():
         keys = list( self.dict_gals["galaxymakers"].keys() )
         if len(keys)>0:
             for iout in keys:
-                if (iout > cout+4 and self.prog) or (iout < cout+4 and not self.prog):
+                if (iout > cout+5 and self.prog) or (iout < cout-5 and not self.prog):
                     refmem = MB()
                     self.dict_gals['galaxymakers'][iout] = None
                     self.dict_gals['gmpids'][iout] = None
@@ -202,7 +202,7 @@ class Treebase():
         keys = list( self.dict_part.keys() )
         if len(keys)>0:
             for iout in keys:
-                if (iout > cout+4 and self.prog) or (iout < cout+4 and not self.prog):
+                if (iout > cout+5 and self.prog) or (iout < cout-5 and not self.prog):
                     jkeys = list(self.dict_part[iout].keys())
                     for galid in jkeys:
                         refmem = MB()
@@ -221,7 +221,7 @@ class Treebase():
         keys = list( self.dict_leaves.keys() )
         if len(keys)>0:
             for iout in keys:
-                if (iout > cout+4 and self.prog) or (iout < cout+4 and not self.prog):
+                if (iout > cout+5 and self.prog) or (iout < cout-5 and not self.prog):
                     jkeys = list(self.dict_leaves[iout].keys())
                     for galid in jkeys:
                         if len(self.dict_leaves[iout][galid].parents)==0:

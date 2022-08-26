@@ -153,7 +153,7 @@ class Leaf():
                     neighbors, rate = neighbors[ind], rate[ind]
                     self.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} after crossmatch")
                     if len(neighbors) > 0:
-                        if len(neighbors) > nnext or len(igals) > 2*nnext:
+                        if len(neighbors) > nnext:
                             arg = np.argsort(rate)
                             neighbors = neighbors[arg][-nnext:]
                             self.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} after score sorting")
