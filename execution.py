@@ -118,7 +118,7 @@ if not os.path.isdir(f"./result/{p.mode}"):
 
 if p.overwrite:
     fnames = [f"./result/{p.mode}/{progstr}_Branch_ID{target['id']:07d}_iout{p.iout:05d}.pickle" for target in targets]
-    ind = np.isin(fnames, os.listdir("./data"))    
+    ind = np.isin(fnames, os.listdir("./result"))    
     if howmany(ind,True)>0:
         debugger.info(f"I find {howmany(ind, True)} of {len(targets)} saved files! --> Use {howmany(ind, False)} {galstrs}\n")
         print(f"I find {howmany(ind, True)} of {len(targets)} saved files! --> Use {howmany(ind, False)} {galstrs}\n")
