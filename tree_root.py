@@ -72,7 +72,7 @@ class Treebase():
         clock.done()
 
     def summary(self, isprint=False):
-        temp = [f"{key} | " for key in self.dict_snap.keys()]
+        temp = [f"{key}({sys.getsizeof(self.dict_snap.part_data) / 2**20:.2f} GB) | " for key in self.dict_snap.keys()]
         tsnap = "".join(temp)
         
         temp = []
