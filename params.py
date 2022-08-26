@@ -31,7 +31,8 @@ prog = True
 #       int ID:   Specific one galaxy
 #       ID list:  Specific several galaxies
 #       tuple:    Use galaxies mass range (minmass, maxmass)
-usegals = 'all'
+#usegals = 'all'
+usegals = 1
 
 #   [overwrite]
 #   If tree results already exist, overwrite or not?
@@ -51,6 +52,6 @@ detail = True
 
 #   [flush_GB]
 #   Memory threshold for auto-flush in Gigabytes
-flush_GB = 100
+flush_GB = 200
 
 

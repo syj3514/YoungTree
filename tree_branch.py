@@ -262,10 +262,10 @@ class Branch():
 
         if self.prog:
             iout = np.max(list(self.candidates.keys()))
-            self.debugger.debug(f"** [choose_winner] winner at {jout} (maxout={iout})")
+            self.debugger.debug(f"** [choose_winner] winner at {jout} (max_of_cand_out={iout})")
         else:
             iout = np.min(list(self.candidates.keys()))
-            self.debugger.debug(f"** [choose_winner] winner at {jout} (minout={iout})")
+            self.debugger.debug(f"** [choose_winner] winner at {jout} (min_of_cand_out={iout})")
 
         if iout != self.rootout: # Skip start iout
             if jout==iout:

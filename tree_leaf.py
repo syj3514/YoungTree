@@ -220,13 +220,13 @@ class Leaf():
         checkwei = self.pweight
         if self.prog:
             igyr = self.data.load_snap(self.iout, prefix=prefix).params['age']
-            for tth, tout in enumerate(timekeys):
-                candidates = self.branch.candidates[tout]
-                if self.galaxy:
-                    tgyr = self.data.load_snap(tout, prefix=prefix).params['age']
-                    ageind = self.page >= (igyr-tgyr)
-                    checkpid = self.pid[ ageind ]
-                    checkwei = self.pweight[ ageind ]
+        for tth, tout in enumerate(timekeys):
+            candidates = self.branch.candidates[tout]
+            if self.galaxy and self.prog:
+                tgyr = self.data.load_snap(tout, prefix=prefix).params['age']
+                ageind = self.page >= (igyr-tgyr)
+                checkpid = self.pid[ ageind ]
+                checkwei = self.pweight[ ageind ]
             
             ith = 0
             for i, ileaf in candidates.items():
