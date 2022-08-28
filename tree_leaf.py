@@ -136,7 +136,7 @@ class Leaf():
             if len(neighbors)>0: # candidates at jout
                 neighbors = neighbors[(neighbors['m'] >= igal['m']*masscut_percent/100) & (~np.isin(neighbors['id'], nexts))]
                 self.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} after masscut {masscut_percent} percent")
-                if len(neighbors) > nnext or len(igals) > 2*nnext:
+                if (len(neighbors)>0) and (len(neighbors) > nnext or len(igals) > 2*nnext):
                     _, checkpid = self.data.load_gal(iout, igal['id'], return_part=True, prefix=prefix)
 
                     rate = np.zeros(len(neighbors))
