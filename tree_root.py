@@ -347,9 +347,9 @@ class Treebase():
                     clock2.done()
                 try:
                     if galaxy:
-                        part = np.array(snap.part['star'].table)
+                        part = snap.part['star'].table
                     else:
-                        part = np.array(snap.part['dm'].table)
+                        part = snap.part['dm'].table
                     part['id'] = np.abs(part['id'])
                     if atleast_numba(part['id'], gpid):
                         part = part[large_isin(part['id'], gpid)]
