@@ -275,12 +275,14 @@ class Treebase():
             del gm; del gmpid; del cumparts; del temp
             gc.collect()
             if self.loadall:
-                self.debugger.info(f"{prefix} *** loadall=True: loadall {self.partstr}s...")
+                self.debugger.info(f"{prefix} *** loadall=True: loadall {self.partstr}s: get_part...")
                 snap.box = np.array([[0, 1], [0, 1], [0, 1]])
                 snap.get_part(onlystar=self.galaxy)
+                self.debugger.info(f"{prefix} *** loadall=True: loadall {self.partstr}s: get_part Done")
+                self.debugger.info(f"{prefix} *** loadall=True: loadall {self.partstr}s: load_part to dictionary...")
                 for gal in self.dict_gals["galaxymakers"][iout]:
                     self.load_part(iout, gal['id'], prefix=prefix, silent=True, galaxy=self.galaxy)
-                self.debugger.info(f"{prefix} *** loadall=True: loadall {self.partstr}s Done")
+                self.debugger.info(f"{prefix} *** loadall=True: loadall {self.partstr}s load_part to dictionary Done")
             # clock2.done()
 
         # clock.done()
@@ -356,6 +358,7 @@ class Treebase():
                         leng = 0
                 except: # didin't found part??
                     leng = 0
+                self.debugger.debug(f"[get_part] {scale}")
                 scale *= 2
                 if scale > 130:
                     break
