@@ -279,9 +279,20 @@ class Treebase():
                 snap.box = np.array([[0, 1], [0, 1], [0, 1]])
                 snap.get_part(onlystar=self.galaxy)
                 self.debugger.info(f"{prefix} *** loadall=True: loadall {self.partstr}s: get_part Done")
+                
+                # self.debugger.info(f"{prefix} *** loadall=True: loadall {self.partstr}s: Abs ...")    
+                snap.part_data['id'] = np.abs(snap.part_data['id'])
+                # self.debugger.info(f"{prefix} *** loadall=True: loadall {self.partstr}s: Abs Done")    
+                self.debugger.info(f"{prefix} *** loadall=True: loadall {self.partstr}s: sorting...")    
+                arg = np.argsort(snap.part_data['id'])
+                snap.part_data = snap.part_data[arg]
+                snap.part.table = snap.part_data
+                self.dict_snap[iout] = snap
+                self.debugger.info(f"{prefix} *** loadall=True: loadall {self.partstr}s: sorting Done")
+                
                 self.debugger.info(f"{prefix} *** loadall=True: loadall {self.partstr}s: load_part to dictionary...")
                 for gal in self.dict_gals["galaxymakers"][iout]:
-                    self.load_part(iout, gal['id'], prefix=prefix, silent=True, galaxy=self.galaxy)
+                    self.load_part(iout, gal['id'], prefix=prefix, silent=False, galaxy=self.galaxy)
                 self.debugger.info(f"{prefix} *** loadall=True: loadall {self.partstr}s load_part to dictionary Done")
             # clock2.done()
 
@@ -332,38 +343,57 @@ class Treebase():
         snap = self.load_snap(iout, prefix=prefix)
         gal, gpid = self.load_gal(iout, galid, return_part=True, prefix=prefix)
         if not galid in self.dict_part[iout].keys():
-            if snap.part_data is not None:
-                if snap.part_data.nbytes / 2**30 > self.flush_GB:
-                    self.debugger.info(prefix+f" snap.clear!! ({snap.part_data.nbytes / 2**30:.2f} GB)")
-                    snap.clear()
-            leng = 0
-            scale = 1
-            while leng < len(gpid):
-                snap.set_box_halo(gal, 1.1*scale, use_halo_radius=True, radius_name='r')
-                if not silent:
-                    clock2 = timer(text=prefix+"[get_part]", verbose=self.verbose, debugger=self.debugger)
-                snap.get_part(onlystar=self.galaxy)
-                if not silent:
-                    clock2.done()
-                try:
-                    if galaxy:
-                        part = snap.part['star'].table
-                    else:
-                        part = snap.part['dm'].table
-                    part['id'] = np.abs(part['id'])
-                    if atleast_numba(part['id'], gpid):
+            # if snap.part_data is not None:
+            #     if snap.part_data.nbytes / 2**30 > self.flush_GB:
+            #         self.debugger.info(prefix+f" snap.clear!! ({snap.part_data.nbytes / 2**30:.2f} GB)")
+            #         snap.clear()
+            if self.loadall:
+                # clock2 = timer(text=prefix+"[get_part]00", verbose=self.verbose, debugger=self.debugger)
+                # if len(snap.part_data['id']) != np.max(snap.part_data['id']):
+                #     raise ValueError(f"ID:{np.min(snap.part_data['id'])}~{np.max(snap.part_data['id'])} vs len:{len(snap.part_data['id'])}")
+                # clock2.done();clock2 = timer(text=prefix+"[get_part]01", verbose=self.verbose, debugger=self.debugger)
+                part = snap.part_data[gpid-1]
+                # clock2.done();clock2 = timer(text=prefix+"[get_part]02", verbose=self.verbose, debugger=self.debugger)
+                part = snap.Particle(part, snap)
+                # clock2.done();clock2 = timer(text=prefix+"[get_part]03", verbose=self.verbose, debugger=self.debugger)
+                self.dict_part[iout][galid] = part
+                # clock2.done()
+
+            else:
+                leng = 0
+                scale = 1
+                while leng < len(gpid):
+                    snap.set_box_halo(gal, 1.1*scale, use_halo_radius=True, radius_name='r')
+                    # if not silent:
+                        # clock2 = timer(text=prefix+"[get_part]1", verbose=self.verbose, debugger=self.debugger)
+                    snap.get_part(onlystar=self.galaxy)
+                    # if not silent:
+                        # clock2.done();clock2 = timer(text=prefix+"[get_part]2", verbose=self.verbose, debugger=self.debugger)
+                    try:
+                        if galaxy:
+                            part = snap.part.table
+                        else:
+                            part = snap.part['dm'].table
+                        part['id'] = np.abs(part['id'])
+                        # clock2.done();clock2 = timer(text=prefix+"[get_part]3", verbose=self.verbose, debugger=self.debugger)
+                        # if atleast_numba(part['id'], gpid):
+                            # part = part[large_isin(part['id'], gpid)]
+                            # leng = len(part['id'])
                         part = part[large_isin(part['id'], gpid)]
+                        # clock2.done();clock2 = timer(text=prefix+"[get_part]4", verbose=self.verbose, debugger=self.debugger)
                         leng = len(part['id'])
-                    else:
+                        # else:
+                        #     leng = 0
+                    except: # didin't found part??
                         leng = 0
-                except: # didin't found part??
-                    leng = 0
-                self.debugger.debug(f"[get_part] {scale}")
-                scale *= 2
-                if scale > 130:
-                    break
-            part = snap.Particle(part, snap)
-            self.dict_part[iout][galid] = part
+                    self.debugger.debug(f"[get_part] {scale}")
+                    scale *= 2
+                    if scale > 130:
+                        break
+                part = snap.Particle(part, snap)
+                # clock2.done();clock2 = timer(text=prefix+"[get_part]5", verbose=self.verbose, debugger=self.debugger)
+                self.dict_part[iout][galid] = part
+                # clock2.done();clock2 = timer(text=prefix+"[get_part]6", verbose=self.verbose, debugger=self.debugger)
         
         # clock.done()
         return self.dict_part[iout][galid]
