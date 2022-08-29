@@ -11,7 +11,7 @@ class Leaf():
     __slots__ = ['debugger', 'verbose', 'branch', 'parents', 'data', 
                 'mode', 'galaxy', 'gal_gm', 'galid','iout', 'istep',
                 'nextids', 'pruned','interplay',
-                'nparts','pid','page','pm','pweight',
+                'nparts','pid','pm','pweight',
                 'px','py','pz','pvx','pvy','pvz', 'prog']
     def __init__(self, gal, BranchObj, DataObj, verbose=1, prefix="", debugger=None, interplay=False, prog=True, **kwargs):
         func = f"[__Leaf__]"; prefix = f"{prefix}{func}"
@@ -37,7 +37,7 @@ class Leaf():
         self.pid = None
         self.px = None; self.py = None; self.pz = None
         self.pvx = None; self.pvy = None; self.pvz = None
-        self.page = None; self.pm = None; self.pweight = None
+        self.pm = None; self.pweight = None
         self.prog = prog
 
         self.load_parts(prefix=prefix)
@@ -57,7 +57,7 @@ class Leaf():
     def clear(self, msgfrom='self'):
         if len(self.parents)==0:
             self.debugger.info(f"[CLEAR] Leaf (root={self.galid}) [from {msgfrom}]")
-            self.pid=None; self.page=None; self.pm=None; self.pweight=None
+            self.pid=None; self.pm=None; self.pweight=None
             self.px=None; self.py=None; self.py=None
             self.pvx=None; self.pvy=None; self.pvy=None
             self.nparts=0
@@ -75,7 +75,7 @@ class Leaf():
         self.nparts = len(self.pid)
         self.px = temp['x']; self.py = temp['y']; self.pz = temp['z']
         self.pvx = temp['vx', 'km/s']; self.pvy = temp['vy', 'km/s']; self.pvz = temp['vz', 'km/s']
-        self.page = temp['age', 'Gyr']; self.pm = temp['m']
+        self.pm = temp['m']
 
         self.debugger.debug(prefix+f" [ID{self.galid} iout{self.iout}] Nparts={self.gal_gm['nparts']}({self.nparts})")
 
@@ -222,11 +222,6 @@ class Leaf():
             igyr = self.data.load_snap(self.iout, prefix=prefix).params['age']
         for tth, tout in enumerate(timekeys):
             candidates = self.branch.candidates[tout]
-            if self.galaxy and self.prog:
-                tgyr = self.data.load_snap(tout, prefix=prefix).params['age']
-                ageind = self.page >= (igyr-tgyr)
-                checkpid = self.pid[ ageind ]
-                checkwei = self.pweight[ ageind ]
             
             ith = 0
             for i, ileaf in candidates.items():
@@ -273,10 +268,6 @@ class Leaf():
 
         if checkpid is None:
             checkpid = self.pid
-            if self.galaxy and self.prog:
-                tgyr = self.data.load_snap(otherleaf.iout, prefix=prefix).params['age']
-                igyr = self.data.load_snap(self.iout, prefix=prefix).params['age']
-                checkpid = self.pid[ self.page >= (igyr-tgyr) ]
         
         if otherleaf.nparts < len(checkpid)/200:
             return -1

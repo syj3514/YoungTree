@@ -277,7 +277,7 @@ class Treebase():
             if self.loadall:
                 self.debugger.info(f"{prefix} *** loadall=True: loadall {self.partstr}s...")
                 snap.box = np.array([[0, 1], [0, 1], [0, 1]])
-                snap.get_part()
+                snap.get_part(onlystar=self.galaxy)
                 for gal in self.dict_gals["galaxymakers"][iout]:
                     self.load_part(iout, gal['id'], prefix=prefix, silent=True, galaxy=self.galaxy)
                 self.debugger.info(f"{prefix} *** loadall=True: loadall {self.partstr}s Done")
@@ -340,7 +340,7 @@ class Treebase():
                 snap.set_box_halo(gal, 1.1*scale, use_halo_radius=True, radius_name='r')
                 if not silent:
                     clock2 = timer(text=prefix+"[get_part]", verbose=self.verbose, debugger=self.debugger)
-                snap.get_part()
+                snap.get_part(onlystar=self.galaxy)
                 if not silent:
                     clock2.done()
                 try:
@@ -359,7 +359,7 @@ class Treebase():
                 scale *= 2
                 if scale > 130:
                     break
-            part = uri.RamsesSnapshot.Particle(part, snap)
+            part = snap.Particle(part, snap)
             self.dict_part[iout][galid] = part
         
         # clock.done()
