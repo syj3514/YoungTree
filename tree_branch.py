@@ -226,6 +226,19 @@ class Branch():
 
         if checkids is not None:
             gals, gmpids = self.data.load_gal(iout, galids, return_part=True, prefix=prefix)
+            if iout in self.candidates.keys():
+                ind = np.zeros(len(gals)).astype(bool)
+                for i, gal in enumerate(gals):
+                    if gal['id'] in self.candidates[iout].keys():
+                        ind[i] = True
+                    else:
+                        self.debugger.info(f"{prefix} *** id{gal['id']} at iout{iout} is already in candidates!")
+                gals, gmpids = gals[ind], gmpids[ind]
+            if len(gals)==0:
+                if iout in self.candidates.keys():
+                    return list(self.candidates[iout].keys())
+                else:
+                    return []
             inds = atleast_numba_para(gmpids, checkids)
             for gal, _, ind in zip(gals, gmpids, inds):
                 # if atleast_numba(gmpid, checkids):
@@ -236,6 +249,19 @@ class Branch():
                     pass
         else:
             gals = self.data.load_gal(iout, galids, return_part=False, prefix=prefix)
+            if iout in self.candidates.keys():
+                ind = np.zeros(len(gals)).astype(bool)
+                for i, gal in enumerate(gals):
+                    if gal['id'] in self.candidates[iout].keys():
+                        ind[i] = True
+                    else:
+                        self.debugger.info(f"{prefix} *** id{gal['id']} at iout{iout} is already in candidates!")
+                gals = gals[ind]
+            if len(gals)==0:
+                if iout in self.candidates.keys():
+                    return list(self.candidates[iout].keys())
+                else:
+                    return []
             for gal in gals:
                 self.gal2leaf(gal, prefix=prefix)
 

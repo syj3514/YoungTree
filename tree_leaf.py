@@ -12,7 +12,7 @@ class Leaf():
                 'mode', 'galaxy', 'gal_gm', 'galid','iout', 'istep',
                 'nextids', 'pruned','interplay',
                 'nparts','pid','pm','pweight',
-                'px','py','pz','pvx','pvy','pvz', 'prog']
+                'px','py','pz','pvx','pvy','pvz', 'prog', 'saved_matchrates']
     def __init__(self, gal, BranchObj, DataObj, verbose=1, prefix="", debugger=None, interplay=False, prog=True, **kwargs):
         func = f"[__Leaf__]"; prefix = f"{prefix}{func}"
         # clock = timer(text=prefix, verbose=verbose, debugger=debugger)
@@ -39,6 +39,8 @@ class Leaf():
         self.pvx = None; self.pvy = None; self.pvz = None
         self.pm = None; self.pweight = None
         self.prog = prog
+        self.saved_matchrates = {}
+        self.saved_veloffsets = {}
 
         self.load_parts(prefix=prefix)
         self.importance(prefix=prefix, usevel=True)
@@ -186,6 +188,7 @@ class Leaf():
                 if jstep > 0 and jstep <= np.max(self.data.nstep):
                     jout = step2out(jstep, galaxy=self.galaxy, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep)
                     if jout in keys:
+                        self.debugger.info(f"{prefix} *** jout(jstep)={jout}({jstep}) is already calculated!")
                         nextids = self.nextids[jout]
                     else:
                         nextids, jout = self.load_nextids(igals, njump=njump, masscut_percent=masscut_percent, nnext=nnext, prefix=prefix, **kwargs)
@@ -216,8 +219,6 @@ class Leaf():
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
 
         timekeys = self.branch.candidates.keys()
-        checkpid = self.pid
-        checkwei = self.pweight
         if self.prog:
             igyr = self.data.load_snap(self.iout, prefix=prefix).params['age']
         for tth, tout in enumerate(timekeys):
@@ -226,22 +227,15 @@ class Leaf():
             ith = 0
             for i, ileaf in candidates.items():
                 # try:
-                score0 = self.calc_matchrate(ileaf, checkpid=self.branch.inipid, weight=self.branch.inipwei, prefix=prefix)
-                score1 = self.calc_matchrate(ileaf, checkpid=checkpid, weight=checkwei, prefix=prefix) # importance weighted matchrate
+                score0 = self.calc_matchrate(ileaf, checkpid=self.branch.inipid, weight=self.branch.inipwei, prefix=prefix, checkiout=self.branch.rootout, checkid=self.branch.rootid)
+                score1 = self.calc_matchrate(ileaf, checkpid=self.pid, weight=self.pweight, prefix=prefix) # importance weighted matchrate
                 score2 = 0  # Velocity offset
                 score3 = 0
                 if score1 > 0 or score0 > 0:
                     if self.interplay:
-                        score1 *= self.calc_matchrate(self, checkpid=ileaf.pid, weight=ileaf.pweight, prefix=prefix)
+                        score1 *= self.calc_matchrate(self, checkpid=ileaf.pid, weight=ileaf.pweight, prefix=prefix, checkiout=ileaf.iout, checkid=ileaf.galid)
                     score2 = self.calc_velocity_offset(ileaf, prefix=prefix)
                     score3 = np.exp( -np.abs(np.log10(self.gal_gm['m']/ileaf.gal_gm['m'])) )   # Mass difference
-                # except Warning as e:
-                #     print("WARNING!! in calc_score")
-                #     breakpoint()
-                #     self.debugger.warning("########## WARNING #########")
-                #     self.debugger.warning(e)
-                #     self.debugger.warning(self.summary())
-                #     raise ValueError("velocity wrong!")
                 self.branch.scores[tout][i] += score0+score1+score2+score3
                 self.branch.score0s[tout][i] += score0
                 self.branch.score1s[tout][i] += score1
@@ -261,27 +255,44 @@ class Leaf():
     #     clock.done()
     #     return val # True or False
 
-    def calc_matchrate(self, otherleaf, checkpid=None, weight=None, prefix=""):
+    def calc_matchrate(self, otherleaf, checkpid=None, weight=None, checkiout=0, checkid=0, prefix=""):
         # Subject to `calc_score` BOTTLENECK!!
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger, level='debug')
 
-        if checkpid is None:
-            checkpid = self.pid
-        
-        if otherleaf.nparts < len(checkpid)/200:
-            return -1
+        if checkiout == 0:
+            checkiout = self.iout
+        if checkid == 0:
+            checkid = self.galid
 
-        # if atleast_numba(checkpid, otherleaf.pid):
-        #     ind = large_isin(checkpid, otherleaf.pid)
-        # else:
-        #     clock.done(add=f"({len(checkpid)} vs {otherleaf.nparts})")
-        #     return -1
-        ind = large_isin(checkpid, otherleaf.pid)
-        clock.done(add=f"({len(checkpid)} vs {otherleaf.nparts})")
-        if howmany(ind,True)==0:
-            return -1
-        return np.sum( weight[ind] ) / np.sum( weight )
+        calc = False
+        ioutkeys = list(otherleaf.saved_matchrates.keys())
+        if (checkiout in ioutkeys):
+            igalkeys = list(otherleaf.saved_matchrates[checkiout].keys())
+            if checkid in igalkeys:
+                val = otherleaf.saved_matchrates[checkiout][checkid]
+                self.debugger.debug(f"{[prefix]} [{checkid}] at iout={checkiout} is already saved in [{otherleaf.galid}] at iout={otherleaf.galid}")
+            else:
+                calc = True
+        else:
+            otherleaf.saved_matchrates[ioutkeys] = {}
+            calc = True
+
+        if calc:
+            if checkpid is None:
+                checkpid = self.pid
+            
+            if otherleaf.nparts < len(checkpid)/200:
+                return -1
+
+            ind = large_isin(checkpid, otherleaf.pid)
+            clock.done(add=f"({len(checkpid)} vs {otherleaf.nparts})")
+            if howmany(ind,True)==0:
+                val = -1
+            else:
+                val = np.sum( weight[ind] ) / np.sum( weight )
+            otherleaf.saved_matchrates[checkiout][checkid] = val
+        return val
 
 
     def calc_bulkmotion(self, checkind=None, prefix="", **kwargs):
@@ -317,18 +328,34 @@ class Leaf():
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger, level='debug')
 
-        ind = large_isin(otherleaf.pid, self.pid)
-        if howmany(ind, True) < 3:
-            clock.done(add=f"({self.nparts} vs {howmany(ind, True)})")
-            return 0
+        calc = False
+        ioutkeys = list(otherleaf.saved_veloffsets.keys())
+        if (self.iout in ioutkeys):
+            igalkeys = list(otherleaf.saved_veloffsets[self.iout].keys())
+            if self.galid in igalkeys:
+                val = otherleaf.saved_veloffsets[self.iout][self.galid]
+                self.debugger.debug(f"{[prefix]} [{self.galid}] at iout={self.iout} is already saved in [{otherleaf.galid}] at iout={otherleaf.galid}")
+            else:
+                calc = True
         else:
-            # refv = self.calc_bulkmotion(useold=True, prefix=prefix)         # selfvel
-            refv = np.array([self.gal_gm['vx'], self.gal_gm['vy'], self.gal_gm['vz']])
-            inv = otherleaf.calc_bulkmotion(checkind=ind, prefix=prefix) - refv  # invel at self-coo
-            # self.debugger.debug(f"gal{refv}, ref{inv}")
-            totv = np.array([otherleaf.gal_gm['vx'], otherleaf.gal_gm['vy'], otherleaf.gal_gm['vz']]) - refv # totvel at self-coo
-            # self.debugger.debug(f"gal{otherleaf.gal_gm[['vx','vy','vz']]}, ref{totv}")
+            otherleaf.saved_veloffsets[ioutkeys] = {}
+            calc = True
+        
+        if calc:
+            ind = large_isin(otherleaf.pid, self.pid)
+            if howmany(ind, True) < 3:
+                clock.done(add=f"({self.nparts} vs {howmany(ind, True)})")
+                val = 0
+            else:
+                # refv = self.calc_bulkmotion(useold=True, prefix=prefix)         # selfvel
+                refv = np.array([self.gal_gm['vx'], self.gal_gm['vy'], self.gal_gm['vz']])
+                inv = otherleaf.calc_bulkmotion(checkind=ind, prefix=prefix) - refv  # invel at self-coo
+                # self.debugger.debug(f"gal{refv}, ref{inv}")
+                totv = np.array([otherleaf.gal_gm['vx'], otherleaf.gal_gm['vy'], otherleaf.gal_gm['vz']]) - refv # totvel at self-coo
+                # self.debugger.debug(f"gal{otherleaf.gal_gm[['vx','vy','vz']]}, ref{totv}")
+                val = 1 - nbnorm(totv - inv)/(nbnorm(inv)+nbnorm(totv))
+            otherleaf.saved_veloffsets[self.iout][self.galid] = val
 
         clock.done(add=f"({self.nparts} vs {howmany(ind, True)})")
         # return 1 - np.sqrt( np.sum((totv - inv)**2) )/(np.linalg.norm(inv)+np.linalg.norm(totv))
-        return 1 - nbnorm(totv - inv)/(nbnorm(inv)+nbnorm(totv))
+        return val
