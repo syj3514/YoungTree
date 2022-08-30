@@ -23,7 +23,7 @@ class Treebase():
                 'partstr', 'Partstr', 'galstr', 'Galstr','verbose', 'debugger',
                 'rurmode', 'repo',
                 'loadall','nout','nstep',
-                'dict_snap','dict_part','dict_gals','dict_leaves','branches_queue', 'prog']
+                'dict_snap','dict_part','dict_gals','dict_leaves', 'dict_nexts', 'branches_queue', 'prog']
     def __init__(self, simmode='hagn', galaxy=True, flush_GB=50, verbose=2, debugger=None, loadall=False, prefix="", prog=True):
         func = f"[__Treebase__]"; prefix = f"{prefix}{func}"
         clock = timer(text=prefix, verbose=verbose, debugger=debugger)
@@ -64,6 +64,7 @@ class Treebase():
         self.dict_part = {} # in {iout}, in {galid}, Particle object
         self.dict_gals = {"galaxymakers":{}, "gmpids":{}} # in each key, in {iout}, Recarray obejct
         self.dict_leaves = {} # in {iout}, in {galid}, Leaf object
+        self.dict_nexts = {}
         # self.saved_out = {"snap":[], "gal":[], "part":[]}
         self.branches_queue = {}
         self.prog = prog

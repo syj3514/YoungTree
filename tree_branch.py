@@ -230,10 +230,10 @@ class Branch():
                 ind = np.zeros(len(gals)).astype(bool)
                 for i, gal in enumerate(gals):
                     if gal['id'] in self.candidates[iout].keys():
-                        ind[i] = True
-                    else:
                         self.debugger.info(f"{prefix} *** id{gal['id']} at iout{iout} is already in candidates!")
-                gals, gmpids = gals[ind], gmpids[ind]
+                    else:
+                        ind[i] = True
+                gals, gmpids = gals[ind], tuple(ib for ib, ibool in zip(gmpids, ind) if ibool)
             if len(gals)==0:
                 if iout in self.candidates.keys():
                     return list(self.candidates[iout].keys())

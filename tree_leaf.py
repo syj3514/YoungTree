@@ -10,7 +10,7 @@ from tree_utool import *
 class Leaf():
     __slots__ = ['debugger', 'verbose', 'branch', 'parents', 'data', 
                 'mode', 'galaxy', 'gal_gm', 'galid','iout', 'istep',
-                'nextids', 'pruned','interplay',
+                'nextids','nextnids', 'pruned','interplay',
                 'nparts','pid','pm','pweight',
                 'px','py','pz','pvx','pvy','pvz', 'prog', 'saved_matchrates', 'saved_veloffsets']
     def __init__(self, gal, BranchObj, DataObj, verbose=1, prefix="", debugger=None, interplay=False, prog=True, **kwargs):
@@ -28,6 +28,7 @@ class Leaf():
         self.istep = out2step(self.iout, galaxy=self.galaxy, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep)
         
         self.nextids = {}
+        self.nextnids = {}
         self.pruned = False
         self.interplay = interplay
         prefix += f"<ID{self.galid}:iout(istep)={self.iout}({self.istep})>"
@@ -118,6 +119,8 @@ class Leaf():
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
 
+        if len(np.unique(igals['timestep']))>1:
+            raise ValueError(f"`load_nextids` gots multi-out gals!")
         iout, istep = ioutistep(igals[0], galaxy=self.galaxy, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep)
         isnap = self.data.load_snap(iout, prefix=prefix)
         jstep = istep-1-njump if self.prog else istep+1+njump
@@ -129,41 +132,62 @@ class Leaf():
         nexts = np.zeros(3).astype(int)
         
         for igal in igals: # tester galaxies at iout
-            ivel = rms(igal['vx'], igal['vy'], igal['vz'])
-            radii = 5*max(igal['r'],1e-4) + 5*dt*ivel*jsnap.unit['km']
-            neighbors = cut_sphere(jgals, igal['x'], igal['y'], igal['z'], radii, both_sphere=True)
-            self.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} in radii")
-            
-            
-            if len(neighbors)>0: # candidates at jout
-                neighbors = neighbors[(neighbors['m'] >= igal['m']*masscut_percent/100) & (~np.isin(neighbors['id'], nexts))]
-                self.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} after masscut {masscut_percent} percent")
-                if (len(neighbors)>0) and (len(neighbors) > nnext or len(igals) > 2*nnext):
-                    _, checkpid = self.data.load_gal(iout, igal['id'], return_part=True, prefix=prefix)
+            calc = True
+            if iout in self.data.dict_leaves.keys():
+                if igal['id'] in self.data.dict_leaves[iout].keys():
+                    ileaf = self.data.dict_leaves[iout][igal['id']]
+                    if jout in ileaf.nextids.keys():
+                        nexts = np.concatenate((nexts, ileaf.nextids[jout]))
+                        self.debugger.debug(f"{prefix} igal[{igal['id']} at {iout}] already calculated fats at {jout}!")
+                        calc = False
+            if calc:
+                ivel = rms(igal['vx'], igal['vy'], igal['vz'])
+                radii = 5*max(igal['r'],1e-4) + 5*dt*ivel*jsnap.unit['km']
+                neighbors = cut_sphere(jgals, igal['x'], igal['y'], igal['z'], radii, both_sphere=True)
+                self.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} in radii")
+                
+                
+                if len(neighbors)>0: # candidates at jout
+                    neighbors = neighbors[(neighbors['m'] >= igal['m']*masscut_percent/100) & (~np.isin(neighbors['id'], nexts))]
+                    self.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} after masscut {masscut_percent} percent")
+                    if (len(neighbors)>0) and ((len(neighbors)>nnext) or (len(igals)>2*nnext)):
+                        _, checkpid = self.data.load_gal(iout, igal['id'], return_part=True, prefix=prefix)
 
-                    rate = np.zeros(len(neighbors))
-                    gals, gmpids = self.data.load_gal(jout, neighbors['id'], return_part=True, prefix=prefix)
-                    # iout, istep = ioutistep(igal, galaxy=self.galaxy, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep)
-                    ith = 0
-                    for _, gmpid in zip(gals, gmpids):
-                        if atleast_numba(checkpid, gmpid):
-                            ind = large_isin(checkpid, gmpid)
-                            rate[ith] = howmany(ind, True)/len(checkpid)
-                        ith += 1
-                    ind = rate>0
+                        rate = np.zeros(len(neighbors))
+                        gals, gmpids = self.data.load_gal(jout, neighbors['id'], return_part=True, prefix=prefix)
+                        # iout, istep = ioutistep(igal, galaxy=self.galaxy, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep)
+                        ith = 0
+                        for _, gmpid in zip(gals, gmpids):
+                            if atleast_numba(checkpid, gmpid):
+                                ind = large_isin(checkpid, gmpid)
+                                rate[ith] = howmany(ind, True)/len(checkpid)
+                            ith += 1
+                        ind = rate>0
 
-                    neighbors, rate = neighbors[ind], rate[ind]
-                    self.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} after crossmatch")
-                    if len(neighbors) > 0:
-                        if len(neighbors) > nnext:
-                            arg = np.argsort(rate)
-                            neighbors = neighbors[arg][-nnext:]
-                            self.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} after score sorting")
-                        nexts = np.concatenate((nexts, neighbors['id']))
-                elif len(neighbors) > 0:
-                    nexts = np.concatenate((nexts, neighbors['id']))
+                        neighbors, rate = neighbors[ind], rate[ind]
+                        self.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} after crossmatch")
+                        if len(neighbors) > 0:
+                            if len(neighbors) > nnext:
+                                arg = np.argsort(rate)
+                                neighbors = neighbors[arg][-nnext:]
+                                self.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} after score sorting")
+                            nid = neighbors['id']
+                            nexts = np.concatenate((nexts, nid))
+                        else:
+                            nid = np.zeros(1).astype(int)
+
+                    elif len(neighbors) > 0:
+                        nid = neighbors['id']
+                        nexts = np.concatenate((nexts, nid))
+                    else:
+                        nid = np.zeros(1).astype(int)
                 else:
-                    pass
+                    nid = np.zeros(1).astype(int)
+                
+                if iout in self.data.dict_leaves.keys():
+                    if igal['id'] in self.data.dict_leaves[iout].keys():
+                        ileaf = self.data.dict_leaves[iout][igal['id']]
+                        ileaf.nextids[jout] = nid
             
         nexts = np.concatenate((nexts, np.zeros(3).astype(int)))
         
@@ -175,8 +199,8 @@ class Leaf():
         ############################################################
         ########    ADD case when no nexther, jump beyond     ####### Maybe done?
         ############################################################
-        # if not self.nextids:
-        keys = list(self.nextids.keys())
+        # if not self.nextnids:
+        keys = list(self.nextnids.keys())
         if len(keys) < 5:
             func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
             clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
@@ -189,28 +213,28 @@ class Leaf():
                     jout = step2out(jstep, galaxy=self.galaxy, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep)
                     if jout in keys:
                         self.debugger.info(f"{prefix} *** jout(jstep)={jout}({jstep}) is already calculated!")
-                        nextids = self.nextids[jout]
+                        nextnids = self.nextnids[jout]
                     else:
-                        nextids, jout = self.load_nextids(igals, njump=njump, masscut_percent=masscut_percent, nnext=nnext, prefix=prefix, **kwargs)
-                        self.nextids[jout] = nextids
-                    self.debugger.info(f"*** jout(jstep)={jout}({jstep}), nexts={nextids}")
-                    if len(nextids) == 0:
+                        nextnids, jout = self.load_nextids(igals, njump=njump, masscut_percent=masscut_percent, nnext=nnext, prefix=prefix, **kwargs)
+                        self.nextnids[jout] = nextnids
+                    self.debugger.info(f"*** jout(jstep)={jout}({jstep}), nextns={nextnids}")
+                    if len(nextnids) == 0:
                         self.debugger.info("JUMP!!")
                         njump += 1
                     else:
-                        nextids = self.branch.update_cands(jout, nextids, checkids=self.pid, prefix=prefix) # -> update self.branch.candidates & self.branch.scores
-                        if len(nextids) == 0:
+                        nextnids = self.branch.update_cands(jout, nextnids, checkids=self.pid, prefix=prefix) # -> update self.branch.candidates & self.branch.scores
+                        if len(nextnids) == 0:
                             self.debugger.info("JUMP!!")
                             njump += 1
                         else:
                             njump = 0
-                            igals = self.data.load_gal(jout, nextids, return_part=False, prefix=prefix)
+                            igals = self.data.load_gal(jout, nextnids, return_part=False, prefix=prefix)
 
             clock.done()
-        keys = list(self.nextids.keys())
+        keys = list(self.nextnids.keys())
         if len(keys)==0:
             return False
-        temp = np.sum([len(self.nextids[key]) for key in keys])
+        temp = np.sum([len(self.nextnids[key]) for key in keys])
         return temp > 0
     
 
