@@ -275,7 +275,7 @@ class Leaf():
             else:
                 calc = True
         else:
-            otherleaf.saved_matchrates[ioutkeys] = {}
+            otherleaf.saved_matchrates[checkiout] = {}
             calc = True
 
         if calc:
@@ -338,7 +338,7 @@ class Leaf():
             else:
                 calc = True
         else:
-            otherleaf.saved_veloffsets[ioutkeys] = {}
+            otherleaf.saved_veloffsets[self.iout] = {}
             calc = True
         
         if calc:
