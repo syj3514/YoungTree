@@ -12,7 +12,7 @@ class Leaf():
                 'mode', 'galaxy', 'gal_gm', 'galid','iout', 'istep',
                 'nextids', 'pruned','interplay',
                 'nparts','pid','pm','pweight',
-                'px','py','pz','pvx','pvy','pvz', 'prog', 'saved_matchrates']
+                'px','py','pz','pvx','pvy','pvz', 'prog', 'saved_matchrates', 'saved_veloffsets']
     def __init__(self, gal, BranchObj, DataObj, verbose=1, prefix="", debugger=None, interplay=False, prog=True, **kwargs):
         func = f"[__Leaf__]"; prefix = f"{prefix}{func}"
         # clock = timer(text=prefix, verbose=verbose, debugger=debugger)
