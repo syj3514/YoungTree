@@ -227,7 +227,7 @@ class Branch():
         if checkids is not None:
             gals, gmpids = self.data.load_gal(iout, galids, return_part=True, prefix=prefix)
             if iout in self.candidates.keys():
-                ind = np.zeros(len(gals)).astype(bool)
+                ind = np.zeros(len(gals), dtype=bool)
                 for i, gal in enumerate(gals):
                     if gal['id'] in self.candidates[iout].keys():
                         self.debugger.info(f"{prefix} *** id{gal['id']} at iout{iout} is already in candidates!")
@@ -250,7 +250,7 @@ class Branch():
         else:
             gals = self.data.load_gal(iout, galids, return_part=False, prefix=prefix)
             if iout in self.candidates.keys():
-                ind = np.zeros(len(gals)).astype(bool)
+                ind = np.zeros(len(gals), dtype=bool)
                 for i, gal in enumerate(gals):
                     if gal['id'] in self.candidates[iout].keys():
                         ind[i] = True

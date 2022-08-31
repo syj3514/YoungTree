@@ -129,7 +129,7 @@ class Leaf():
         jgals = self.data.load_gal(jout, 'all', return_part=False, prefix=prefix) # BOTTLENECK!!
         dt = np.abs( isnap.params['age'] - jsnap.params['age'] )
         dt *= 1e9 * 365 * 24 * 60 * 60 # Gyr to sec
-        nexts = np.zeros(3).astype(int)
+        nexts = np.array([0,0,0])
         
         for igal in igals: # tester galaxies at iout
             calc = True
@@ -174,22 +174,22 @@ class Leaf():
                             nid = neighbors['id']
                             nexts = np.concatenate((nexts, nid))
                         else:
-                            nid = np.zeros(1).astype(int)
+                            nid = np.array([0])
 
                     elif len(neighbors) > 0:
                         nid = neighbors['id']
                         nexts = np.concatenate((nexts, nid))
                     else:
-                        nid = np.zeros(1).astype(int)
+                        nid = np.array([0])
                 else:
-                    nid = np.zeros(1).astype(int)
+                    nid = np.array([0])
                 
                 if iout in self.data.dict_leaves.keys():
                     if igal['id'] in self.data.dict_leaves[iout].keys():
                         ileaf = self.data.dict_leaves[iout][igal['id']]
                         ileaf.nextids[jout] = nid
             
-        nexts = np.concatenate((nexts, np.zeros(3).astype(int)))
+        nexts = np.concatenate((nexts, np.array([0,0,0])))
         
         clock.done()
         return np.unique( nexts[nexts>0] ), jout
@@ -295,7 +295,7 @@ class Leaf():
             igalkeys = list(otherleaf.saved_matchrates[checkiout].keys())
             if checkid in igalkeys:
                 val = otherleaf.saved_matchrates[checkiout][checkid]
-                self.debugger.debug(f"{[prefix]} [{checkid}] at iout={checkiout} is already saved in [{otherleaf.galid}] at iout={otherleaf.galid}")
+                self.debugger.debug(f"{[prefix]} [{checkid}] at iout={checkiout} is already saved in [{otherleaf.galid}] at iout={otherleaf.iout}")
             else:
                 calc = True
         else:
@@ -358,7 +358,7 @@ class Leaf():
             igalkeys = list(otherleaf.saved_veloffsets[self.iout].keys())
             if self.galid in igalkeys:
                 val = otherleaf.saved_veloffsets[self.iout][self.galid]
-                self.debugger.debug(f"{[prefix]} [{self.galid}] at iout={self.iout} is already saved in [{otherleaf.galid}] at iout={otherleaf.galid}")
+                self.debugger.debug(f"{[prefix]} [{self.galid}] at iout={self.iout} is already saved in [{otherleaf.galid}] at iout={otherleaf.iout}")
             else:
                 calc = True
         else:

@@ -249,7 +249,7 @@ def large_isin(a, b):
     # shape = a.shape
     # a = a.ravel()
     n = len(a)
-    result = np.full(n, False)
+    result = np.zeros(n, dtype=bool)
     set_b = set(b)
     for i in nb.prange(n):
         if a[i] in set_b:
@@ -276,7 +276,7 @@ def atleast_numba_para(aa, b):
     Return True if any element of a is in b
     '''
     nn = len(aa)
-    results = np.full(nn, False)
+    results = np.zeros(nn, dtype=bool)
     for j in nb.prange(nn):
         a = aa[j]
         n = len(a)
