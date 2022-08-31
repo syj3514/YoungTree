@@ -380,6 +380,6 @@ class Leaf():
                 val = 1 - nbnorm(totv - inv)/(nbnorm(inv)+nbnorm(totv))
             otherleaf.saved_veloffsets[self.iout][self.galid] = val
 
-        clock.done(add=f"({self.nparts} vs {howmany(ind, True)})")
+            clock.done(add=f"({self.nparts} vs {howmany(ind, True)})")
         # return 1 - np.sqrt( np.sum((totv - inv)**2) )/(np.linalg.norm(inv)+np.linalg.norm(totv))
         return val
