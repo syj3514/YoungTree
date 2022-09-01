@@ -352,7 +352,7 @@ class Branch():
                 for iid in ids:
                     refmem = MB()
                     if iid != winid:
-                        self.disconnect(self, self.candidates[iout][iid], prefix=prefix)
+                        self.disconnect(self.candidates[iout][iid], prefix=prefix)
                         # self.candidates[iout][iid].parents.remove(self.rootid)
                         # self.debugger.debug(f"*** Branch({self.rootid}) connection lost to Leaf({iid} at {iout})")
                     del self.candidates[iout][iid]
