@@ -241,7 +241,7 @@ class Leaf():
                         njump = 0
                         igals = self.data.load_gal(jout, nextnids, return_part=False, prefix=prefix)
 
-            clock.done()
+        clock.done()
         keys = list(self.nextnids.keys())
         if len(keys)==0:
             return False
