@@ -70,7 +70,7 @@ class Branch():
             jkeys = list( self.candidates[ikey].keys() )
             for jkey in jkeys:
                 if self.scores[ikey][jkey] <= -1:
-                    self.disconnect(self.candidates[ikey][jkey])
+                    self.disconnect(self.candidates[ikey][jkey], prefix="[Branch Clear]")
                     del self.candidates[ikey][jkey]
                     del self.scores[ikey][jkey]
             if len(self.candidates[ikey].keys())<1:
@@ -80,7 +80,7 @@ class Branch():
         self.data = None
         self.root = None
         self.candidates = {}
-        self.disconnect(self.rootleaf)
+        self.disconnect(self.rootleaf, prefix="[Branch Clear]")
         self.rootleaf = None
         self.leaves = {}
 
@@ -187,7 +187,7 @@ class Branch():
                 ids = list( self.candidates[key].keys() )
                 for iid in ids:
                     refmem = MB()
-                    self.disconnect(self.candidates[key][iid])
+                    self.disconnect(self.candidates[key][iid], prefix=prefix)
                     del self.candidates[key][iid]
                     self.debugger.debug(f"* [Branch][Reset] remove {iid} leaf at iout={key} ({refmem-MB():.2f} MB saved)")
                 del self.candidates[key]
@@ -281,7 +281,7 @@ class Branch():
         else:
             return []
     
-    def disconnect(self, leaf):
+    def disconnect(self, leaf, prefix=""):
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func} (B{self.rootid} <-> L{leaf.galid} at {leaf.iout})"
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
 
@@ -341,7 +341,7 @@ class Branch():
                     self.debugger.debug(f"** [Choose_winner] winid={winid}, winscore={winscore}")
                     self.debugger.debug(f"** [Choose_winner] root leaf {self.rootleaf.gal_gm['id']} at {self.rootleaf.gal_gm['timestep']}")
                     # self.rootleaf.parents.remove(self.rootid)
-                    self.disconnect(self.rootleaf)
+                    self.disconnect(self.rootleaf, prefix=prefix)
                     self.rootleaf = self.candidates[iout][winid]
                     self.debugger.debug(f"** [Choose_winner] root leaf --> {self.rootleaf.gal_gm['id']} at {self.rootleaf.gal_gm['timestep']}")
                     self.go = self.rootleaf.find_candidates(prefix=prefix)
@@ -352,7 +352,7 @@ class Branch():
                 for iid in ids:
                     refmem = MB()
                     if iid != winid:
-                        self.disconnect(self, self.candidates[iout][iid])
+                        self.disconnect(self, self.candidates[iout][iid], prefix=prefix)
                         # self.candidates[iout][iid].parents.remove(self.rootid)
                         # self.debugger.debug(f"*** Branch({self.rootid}) connection lost to Leaf({iid} at {iout})")
                     del self.candidates[iout][iid]
@@ -368,7 +368,7 @@ class Branch():
                         if self.scores[ikey][jkey] <= -1:
                             self.debugger.debug(f"** [Choose_winner] iout={ikey}, ID={jkey}, score={self.scores[ikey][jkey]}")
                             refmem = MB()
-                            self.disconnect(self.candidates[ikey][jkey])
+                            self.disconnect(self.candidates[ikey][jkey], prefix=prefix)
                             # self.candidates[ikey][jkey].parents.remove(self.rootid)
                             # self.debugger.debug(f"*** Branch({self.rootid}) connection lost to Leaf({iid} at {iout})")
                             del self.candidates[ikey][jkey]

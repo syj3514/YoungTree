@@ -229,7 +229,7 @@ class Treebase():
                             if self.dict_leaves[iout][galid].clear_ready:
                                 refmem = MB()
                                 if self.dict_leaves[iout][galid].branch is not None:
-                                    self.dict_leaves[iout][galid].branch.disconnect(self.dict_leaves[iout][galid])
+                                    self.dict_leaves[iout][galid].branch.disconnect(self.dict_leaves[iout][galid], prefix=prefix)
                                     self.dict_leaves[iout][galid].branch = None
                                 self.dict_leaves[iout][galid].clear(msgfrom="flush_auto")
                                 self.dict_leaves[iout][galid] = None

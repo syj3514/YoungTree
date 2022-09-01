@@ -69,12 +69,12 @@ class Leaf():
                 self.nparts=0
                 self.gal_gm = None
                 if self.branch is not None:
-                    self.branch.disconnect(self)
+                    self.branch.disconnect(self, prefix="[Leaf Clear]")
                 self.branch = None
                 if len(self.otherbranch) > 0:
                     for ibranch in self.otherbranch:
                         if ibranch is not None:
-                            ibranch.disconnect(self)
+                            ibranch.disconnect(self, prefix="[Leaf Clear]")
                 self.otherbranch = None
                 self.pruned = True
             else:
