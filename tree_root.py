@@ -226,12 +226,18 @@ class Treebase():
                     jkeys = list(self.dict_leaves[iout].keys())
                     for galid in jkeys:
                         if len(self.dict_leaves[iout][galid].parents)==0:
-                            refmem = MB()
-                            self.dict_leaves[iout][galid].clear(msgfrom="flush_auto")
-                            self.dict_leaves[iout][galid] = None
-                            del self.dict_leaves[iout][galid]
-                            gc.collect()
-                            self.debugger.info(f"* [flush][Leaf] remove iout={iout} {self.galstr}={galid} ({refmem-MB():.2f} MB saved)")
+                            if self.dict_leaves[iout][galid].clear_ready:
+                                refmem = MB()
+                                if self.dict_leaves[iout][galid].branch is not None:
+                                    self.dict_leaves[iout][galid].branch.disconnect(self.dict_leaves[iout][galid])
+                                    self.dict_leaves[iout][galid].branch = None
+                                self.dict_leaves[iout][galid].clear(msgfrom="flush_auto")
+                                self.dict_leaves[iout][galid] = None
+                                del self.dict_leaves[iout][galid]
+                                gc.collect()
+                                self.debugger.info(f"* [flush][Leaf] remove iout={iout} {self.galstr}={galid} ({refmem-MB():.2f} MB saved)")
+                            else:
+                                self.dict_leaves[iout][galid].clear()
                     if len(self.dict_leaves[iout].keys())==0:
                         refmem = MB()
                         self.dict_leaves[iout] = None
@@ -328,10 +334,14 @@ class Treebase():
                 gal = self.load_gal(iout, galid, prefix=prefix)
             self.dict_leaves[iout][galid] = Leaf(gal, branch, self, verbose=self.verbose-1, prefix=prefix, debugger=self.debugger, interplay=branch.interplay, prog=self.prog)
         
-        if not branch.root['id'] in self.dict_leaves[iout][galid].parents:
+        if not branch.rootid in self.dict_leaves[iout][galid].parents:
+            self.dict_leaves[iout][galid].parents += [branch.rootid]
+        
+        if self.dict_leaves[iout][galid].branch != branch:
+            if not self.dict_leaves[iout][galid].branch in self.dict_leaves[iout][galid].otherbranch:
+                self.dict_leaves[iout][galid].otherbranch += [self.dict_leaves[iout][galid].branch]
             self.dict_leaves[iout][galid].branch = branch
-            self.dict_leaves[iout][galid].parents += [branch.root['id']]
-
+        self.dict_leaves[iout][galid].clear_ready=False
         return self.dict_leaves[iout][galid]
 
 

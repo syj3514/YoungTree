@@ -8,8 +8,8 @@ from tree_utool import *
 ###############         Leaf Class                #######
 #########################################################
 class Leaf():
-    __slots__ = ['debugger', 'verbose', 'branch', 'parents', 'data', 
-                'mode', 'galaxy', 'gal_gm', 'galid','iout', 'istep',
+    __slots__ = ['debugger', 'verbose', 'branch','otherbranch', 'parents', 'data', 
+                'mode', 'galaxy', 'gal_gm', 'galid','iout', 'istep', 'clear_ready',
                 'nextids','nextnids', 'pruned','interplay',
                 'nparts','pid','pm','pweight',
                 'px','py','pz','pvx','pvy','pvz', 'prog', 'saved_matchrates', 'saved_veloffsets']
@@ -20,10 +20,12 @@ class Leaf():
         self.verbose = verbose
 
         self.branch = BranchObj
+        self.otherbranch = []
         self.parents = [self.branch.root['id']]
         self.data = DataObj
         self.mode, self.galaxy = self.branch.mode, self.branch.galaxy
         self.gal_gm = gal
+        self.clear_ready = False
         self.galid, self.iout = self.gal_gm['id'], self.gal_gm['timestep']
         self.istep = out2step(self.iout, galaxy=self.galaxy, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep)
         
@@ -59,14 +61,24 @@ class Leaf():
 
     def clear(self, msgfrom='self'):
         if len(self.parents)==0:
-            self.debugger.info(f"[CLEAR] Leaf (root={self.galid}) [from {msgfrom}]")
-            self.pid=None; self.pm=None; self.pweight=None
-            self.px=None; self.py=None; self.py=None
-            self.pvx=None; self.pvy=None; self.pvy=None
-            self.nparts=0
-            self.gal_gm = None
-            self.branch = None
-            self.pruned = True
+            if self.clear_ready:
+                self.debugger.info(f"[CLEAR] Leaf (root={self.galid}) [from {msgfrom}]")
+                self.pid=None; self.pm=None; self.pweight=None
+                self.px=None; self.py=None; self.py=None
+                self.pvx=None; self.pvy=None; self.pvy=None
+                self.nparts=0
+                self.gal_gm = None
+                if self.branch is not None:
+                    self.branch.disconnect(self)
+                self.branch = None
+                if len(self.otherbranch) > 0:
+                    for ibranch in self.otherbranch:
+                        if ibranch is not None:
+                            ibranch.disconnect(self)
+                self.otherbranch = None
+                self.pruned = True
+            else:
+                self.clear_ready = True
 
     def load_parts(self, prefix=""):
         # Subject to `__init__`
@@ -201,34 +213,33 @@ class Leaf():
         ############################################################
         # if not self.nextnids:
         keys = list(self.nextnids.keys())
-        if len(keys) < 5:
-            func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
-            clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
+        func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
+        clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
 
-            igals = np.atleast_1d(self.gal_gm)
-            njump=0
-            for i in range(nstep):
-                jstep = self.istep-1-i if self.prog else self.istep+1+i
-                if jstep > 0 and jstep <= np.max(self.data.nstep):
-                    jout = step2out(jstep, galaxy=self.galaxy, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep)
-                    if jout in keys:
-                        self.debugger.info(f"{prefix} *** jout(jstep)={jout}({jstep}) is already calculated!")
-                        nextnids = self.nextnids[jout]
-                    else:
-                        nextnids, jout = self.load_nextids(igals, njump=njump, masscut_percent=masscut_percent, nnext=nnext, prefix=prefix, **kwargs)
-                        self.nextnids[jout] = nextnids
-                    self.debugger.info(f"*** jout(jstep)={jout}({jstep}), nextns={nextnids}")
+        igals = np.atleast_1d(self.gal_gm)
+        njump=0
+        for i in range(nstep):
+            jstep = self.istep-1-i if self.prog else self.istep+1+i
+            if jstep > 0 and jstep <= np.max(self.data.nstep):
+                jout = step2out(jstep, galaxy=self.galaxy, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep)
+                if jout in keys:
+                    self.debugger.info(f"{prefix} *** jout(jstep)={jout}({jstep}) is already calculated!")
+                    nextnids = self.nextnids[jout]
+                else:
+                    nextnids, jout = self.load_nextids(igals, njump=njump, masscut_percent=masscut_percent, nnext=nnext, prefix=prefix, **kwargs)
+                    self.nextnids[jout] = nextnids
+                self.debugger.info(f"*** jout(jstep)={jout}({jstep}), nextns={nextnids}")
+                if len(nextnids) == 0:
+                    self.debugger.info("JUMP!!")
+                    njump += 1
+                else:
+                    nextnids = self.branch.update_cands(jout, nextnids, checkids=self.pid, prefix=prefix) # -> update self.branch.candidates & self.branch.scores
                     if len(nextnids) == 0:
                         self.debugger.info("JUMP!!")
                         njump += 1
                     else:
-                        nextnids = self.branch.update_cands(jout, nextnids, checkids=self.pid, prefix=prefix) # -> update self.branch.candidates & self.branch.scores
-                        if len(nextnids) == 0:
-                            self.debugger.info("JUMP!!")
-                            njump += 1
-                        else:
-                            njump = 0
-                            igals = self.data.load_gal(jout, nextnids, return_part=False, prefix=prefix)
+                        njump = 0
+                        igals = self.data.load_gal(jout, nextnids, return_part=False, prefix=prefix)
 
             clock.done()
         keys = list(self.nextnids.keys())
