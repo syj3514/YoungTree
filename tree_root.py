@@ -19,12 +19,12 @@ from tree_leaf import Leaf
 ###############         Tree Class                #######
 #########################################################
 class Treebase():
-    __slots__ = ['iniGB', 'iniMB', 'flush_GB', 'simmode', 'galaxy', 
+    __slots__ = ['iniGB', 'iniMB', 'flush_GB', 'simmode', 'galaxy', 'logprefix', 'detail',
                 'partstr', 'Partstr', 'galstr', 'Galstr','verbose', 'debugger',
                 'rurmode', 'repo',
                 'loadall','nout','nstep',
                 'dict_snap','dict_part','dict_gals','dict_leaves', 'dict_nexts', 'branches_queue', 'prog']
-    def __init__(self, simmode='hagn', galaxy=True, flush_GB=50, verbose=2, debugger=None, loadall=False, prefix="", prog=True):
+    def __init__(self, simmode='hagn', galaxy=True, flush_GB=50, verbose=2, debugger=None, loadall=False, prefix="", prog=True, logprefix="output_", detail=True):
         func = f"[__Treebase__]"; prefix = f"{prefix}{func}"
         clock = timer(text=prefix, verbose=verbose, debugger=debugger)
 
@@ -33,6 +33,8 @@ class Treebase():
         self.flush_GB = flush_GB
         self.simmode = simmode
         self.galaxy = galaxy
+        self.logprefix=logprefix
+        self.detail=detail
 
         if self.galaxy:
             self.partstr = "star"
@@ -131,6 +133,9 @@ class Treebase():
             else:
                 outs = self.nout[::-1]
             for jout in outs:
+                fname = make_logname(self.simmode, jout, logprefix=self.logprefix)
+                self.debugger.handlers = []
+                self.debugger = custom_debugger(fname, detail=self.detail)
                 keys = list( self.branches_queue.keys() )
                 for key in keys:
                     go = False
@@ -334,12 +339,10 @@ class Treebase():
                 gal = self.load_gal(iout, galid, prefix=prefix)
             self.dict_leaves[iout][galid] = Leaf(gal, branch, self, verbose=self.verbose-1, prefix=prefix, debugger=self.debugger, interplay=branch.interplay, prog=self.prog)
         
-        if self.dict_leaves[iout].pruned:
+        if self.dict_leaves[iout][galid].pruned:
             if gal is None:
                 gal = self.load_gal(iout, galid, prefix=prefix)
             self.dict_leaves[iout][galid] = Leaf(gal, branch, self, verbose=self.verbose-1, prefix=prefix, debugger=self.debugger, interplay=branch.interplay, prog=self.prog)
-
-        branch.connect(self.dict_leaves[iout][galid])
 
         if not branch.rootid in self.dict_leaves[iout][galid].parents:
             self.dict_leaves[iout][galid].parents += [branch.rootid]
@@ -349,7 +352,7 @@ class Treebase():
                 self.dict_leaves[iout][galid].otherbranch += [self.dict_leaves[iout][galid].branch]
             self.dict_leaves[iout][galid].branch = branch
         self.dict_leaves[iout][galid].clear_ready=False
-        self.dict_leaves[iout][galid].report(prefix=prefix)
+        branch.connect(self.dict_leaves[iout][galid])
         return self.dict_leaves[iout][galid]
 
 
@@ -395,14 +398,12 @@ class Treebase():
                             part = snap.part['dm'].table
                         part['id'] = np.abs(part['id'])
                         # clock2.done();clock2 = timer(text=prefix+"[get_part]3", verbose=self.verbose, debugger=self.debugger)
-                        # if atleast_numba(part['id'], gpid):
-                            # part = part[large_isin(part['id'], gpid)]
-                            # leng = len(part['id'])
+                        # self.debugger.debug(f"[NUMBA TEST][load_part] -> [large_isin(a,b)]:")
+                        # self.debugger.debug(f"            type(a)={type(part['id'])}, type(a[0])={type(part['id'][0])}")
+                        # self.debugger.debug(f"            type(b)={type(gpid)}, type(b[0])={type(gpid[0])}")
                         part = part[large_isin(part['id'], gpid)]
                         # clock2.done();clock2 = timer(text=prefix+"[get_part]4", verbose=self.verbose, debugger=self.debugger)
                         leng = len(part['id'])
-                        # else:
-                        #     leng = 0
                     except: # didin't found part??
                         leng = 0
                     self.debugger.debug(f"[get_part] {scale}")

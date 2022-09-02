@@ -6,7 +6,7 @@
 #       ...
 #       "y49096":   YZiCS 49096
 #       "nh":       NewHorizon
-mode = "y39990"
+mode = "nh"
 
 #   [galaxy]
 #   Type of data
@@ -31,8 +31,8 @@ prog = True
 #       int ID:   Specific one galaxy
 #       ID list:  Specific several galaxies
 #       tuple:    Use galaxies mass range (minmass, maxmass)
-usegals = 'all'
-#usegals = [57, 96, 233, 162, 274, 297, 326, 404, 511, 443]
+#usegals = 'all'
+usegals = [57, 96, 233, 162, 274, 297, 326, 404, 511, 443]
 
 #   [overwrite]
 #   If tree results already exist, overwrite or not?
@@ -42,7 +42,8 @@ overwrite = True
 
 #   [logname]
 #   file name of output log (./logname.log)
-logname = f"output_{mode}"
+# logname = f"output_"
+logprefix = f"numbatest_"
 
 #   [detail]
 #   Detail debugging in log

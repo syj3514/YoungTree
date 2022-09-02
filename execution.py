@@ -3,6 +3,8 @@ import psutil
 import time
 import numpy as np
 from rur import uri, uhmi
+import warnings
+import logging
 
 from tree_utool import *
 from tree_root import Treebase
@@ -56,25 +58,9 @@ message = f"< YoungTree >\nfinding {progstr}s\nUsing {modename} {galstr}\n{len(n
 ###############         Debugger                #########
 #########################################################
 debugger = None
-fname = f"./{p.logname}.log"
-if os.path.isfile(fname):
-    num = 1
-    while os.path.isfile(fname):
-        fname = f"./{p.logname}_{num}.log"
-        num += 1
-debugger = logging.getLogger(f"YoungTree_{p.mode}")
-debugger.handlers = []
-if p.detail:
-    debugger.setLevel(logging.DEBUG)
-else:
-    debugger.setLevel(logging.INFO)
-formatter = logging.Formatter(u'%(asctime)s [%(levelname)8s] %(message)s')
-file_handler = logging.FileHandler(fname, mode='a')
-file_handler.setFormatter(formatter)
-debugger.addHandler(file_handler)
-debugger.propagate = False
-debugger.info("Debug Start")
+fname = make_logname(p.mode, -1, logprefix=p.logprefix)
 
+debugger = custom_debugger(fname, detail=p.detail)
 debugger.info(message)
 print(message)
 
@@ -136,7 +122,7 @@ else:
 debugger.info(f"\nAllow {p.flush_GB:.2f} GB Memory")
 print(f"Allow {p.flush_GB:.2f} GB Memory")
 
-MyTree = Treebase(simmode=p.mode, debugger=debugger, verbose=0, flush_GB=p.flush_GB, loadall=loadall, prog=p.prog)
+MyTree = Treebase(simmode=p.mode, debugger=debugger, verbose=0, flush_GB=p.flush_GB, loadall=loadall, prog=p.prog, detail=p.detail, logprefix=p.logprefix)
 
 
 destination = np.min(nout) if p.prog else np.max(nout)

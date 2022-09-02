@@ -40,6 +40,51 @@ class timer():
             else:
                 self.debugger.debug(f"{self.text} Done ({elapse/self.corr:.3f} {self.unit})")
 
+def make_logname(mode, iout, dirname='./log', logprefix=None):
+    if not os.path.isdir(dirname):
+        os.mkdir(dirname)
+    if logprefix is None:
+        logprefix = f"output_"
+
+    if iout<0:
+        fname = f"{dirname}/{logprefix}{mode}_ini.log"
+    else:
+        fname = f"{dirname}/{logprefix}{mode}_{iout:05d}.log"
+    if os.path.isfile(fname):
+        num = 1
+        while os.path.isfile(fname):
+            if iout<0:
+                fname = f"{dirname}/{logprefix}{mode}_ini_{num}.log"
+            else:
+                fname = f"{dirname}/{logprefix}{mode}_{iout:05d}_{num}.log"
+            num += 1
+    return fname
+
+
+from logging.handlers import RotatingFileHandler
+def custom_debugger(fname, detail=True):
+    logger_file_handler = RotatingFileHandler(fname, mode='a')
+    
+    if detail:
+        logger_file_handler.setLevel(logging.DEBUG)
+    else:
+        logger_file_handler.setLevel(logging.INFO)
+    formatter = logging.Formatter(u'%(asctime)s [%(levelname)8s] %(message)s')
+    logger_file_handler.setFormatter(formatter)
+
+    logging.captureWarnings(True)
+
+    root_logger = logging.getLogger(fname)
+    warnings_logger = logging.getLogger("py.warnings")
+    root_logger.handlers = []
+    warnings_logger.handlers = []
+    root_logger.addHandler(logger_file_handler)
+    warnings_logger.addHandler(logger_file_handler)
+    root_logger.setLevel(logging.DEBUG)
+    root_logger.info("Debug Start")
+    root_logger.propagate=False
+    return root_logger
+
 def dprint_(msg, debugger):
     debugger.debug(msg)
 
@@ -249,7 +294,9 @@ def large_isin(a, b):
     # shape = a.shape
     # a = a.ravel()
     n = len(a)
-    result = np.zeros(n, dtype=bool)
+    # result = np.zeros((n,), dtype=bool)
+    result = np.full(n, False)
+    # result = np.full((n,), False)
     set_b = set(b)
     for i in nb.prange(n):
         if a[i] in set_b:
@@ -276,7 +323,8 @@ def atleast_numba_para(aa, b):
     Return True if any element of a is in b
     '''
     nn = len(aa)
-    results = np.zeros(nn, dtype=bool)
+    results = np.full(nn, False)
+    # results = np.zeros(nn, dtype=bool)
     for j in nb.prange(nn):
         a = aa[j]
         n = len(a)

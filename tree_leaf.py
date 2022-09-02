@@ -16,7 +16,7 @@ class Leaf():
     def __init__(self, gal, BranchObj, DataObj, verbose=1, prefix="", debugger=None, interplay=False, prog=True, **kwargs):
         func = f"[__Leaf__]"; prefix = f"{prefix}{func}"
         # clock = timer(text=prefix, verbose=verbose, debugger=debugger)
-        self.debugger=debugger
+        # self.data.debugger=debugger
         self.verbose = verbose
 
         self.branch = BranchObj
@@ -51,7 +51,7 @@ class Leaf():
         # clock.done()
     
     def __del__(self):
-        self.debugger.info(f"[DEL] (L{self.galid} at {self.iout}) is destroyed")
+        self.data.debugger.info(f"[DEL] (L{self.galid} at {self.iout}) is destroyed")
 
     def __str__(self):
         if self.branch is None:
@@ -63,19 +63,19 @@ class Leaf():
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
 
         txt = f"{prefix} [L{self.galid} at {self.iout}]\t{self.nparts} particles (pruned? {self.pruned})"
-        self.debugger.debug(txt)
+        self.data.debugger.debug(txt)
         txt = f"{prefix} Current branch: {self.branch.rootid if self.branch is not None else None}"
-        self.debugger.debug(txt)
+        self.data.debugger.debug(txt)
         txt = f"{prefix} Other branches: {[ib.rootid if ib is not None else None for ib in self.otherbranch]}"
-        self.debugger.debug(txt)
+        self.data.debugger.debug(txt)
         txt = f"{prefix} All parents: {self.parents}"
-        self.debugger.debug(txt)
+        self.data.debugger.debug(txt)
 
 
     def clear(self, msgfrom='self'):
         if len(self.parents)==0:
             if self.clear_ready:
-                self.debugger.info(f"[CLEAR] Leaf (root={self.galid}) [from {msgfrom}]")
+                self.data.debugger.info(f"[CLEAR] Leaf (root={self.galid}) [from {msgfrom}]")
                 self.pid=None; self.pm=None; self.pweight=None
                 self.px=None; self.py=None; self.py=None
                 self.pvx=None; self.pvy=None; self.pvy=None
@@ -91,13 +91,13 @@ class Leaf():
                 self.otherbranch = []
                 self.pruned = True
             else:
-                self.debugger.info(f"[CLEAR_Ready] Leaf (root={self.galid}) [from {msgfrom}]")
+                self.data.debugger.info(f"[CLEAR_Ready] Leaf (root={self.galid}) [from {msgfrom}]")
                 self.clear_ready = True
 
     def load_parts(self, prefix=""):
         # Subject to `__init__`
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
-        clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
+        clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
 
         temp = self.data.load_part(self.iout, self.galid, prefix=prefix, galaxy=self.galaxy)
         self.pid = temp['id']
@@ -106,7 +106,7 @@ class Leaf():
         self.pvx = temp['vx', 'km/s']; self.pvy = temp['vy', 'km/s']; self.pvz = temp['vz', 'km/s']
         self.pm = temp['m']
 
-        self.debugger.debug(prefix+f" [ID{self.galid} iout{self.iout}] Nparts={self.gal_gm['nparts']}({self.nparts})")
+        self.data.debugger.debug(prefix+f" [ID{self.galid} iout{self.iout}] Nparts={self.gal_gm['nparts']}({self.nparts})")
 
         clock.done()
     
@@ -114,7 +114,7 @@ class Leaf():
     def importance(self, prefix="", usevel=True):
         # Subject to `__init__`
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
-        clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
+        clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
         
         cx, cy, cz = self.gal_gm['x'],self.gal_gm['y'],self.gal_gm['z']
         dist = distance3d(cx,cy,cz, self.px, self.py, self.pz) / self.gal_gm['rvir']
@@ -126,13 +126,13 @@ class Leaf():
             dist = np.sqrt( dist**2 + vels**2 )
             # except Warning as e:
             #     print("WARNING!! in importance")
-            #     self.debugger.warning("########## WARNING #########")
-            #     self.debugger.warning(e)
-            #     self.debugger.warning(f"gal velocity {cvx}, {cvy}, {cvz}")
-            #     self.debugger.warning(f"len parts {self.nparts}")
-            #     self.debugger.warning(f"vels first tens {vels[:10]}")
-            #     self.debugger.warning(f"vels std {np.std(vels)}")
-            #     self.debugger.warning(self.summary())
+            #     self.data.debugger.warning("########## WARNING #########")
+            #     self.data.debugger.warning(e)
+            #     self.data.debugger.warning(f"gal velocity {cvx}, {cvy}, {cvz}")
+            #     self.data.debugger.warning(f"len parts {self.nparts}")
+            #     self.data.debugger.warning(f"vels first tens {vels[:10]}")
+            #     self.data.debugger.warning(f"vels std {np.std(vels)}")
+            #     self.data.debugger.warning(self.summary())
             #     breakpoint()
             #     raise ValueError("velocity wrong!")
         self.pweight = self.pm/dist
@@ -143,7 +143,7 @@ class Leaf():
     def load_nextids(self, igals, njump=0, masscut_percent=1, nnext=5, prefix="", **kwargs): # MAIN BOTTLENECK!!
         # Subject to `find_candidates`
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
-        clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
+        clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
 
         if len(np.unique(igals['timestep']))>1:
             raise ValueError(f"`load_nextids` gots multi-out gals!")
@@ -164,18 +164,18 @@ class Leaf():
                     ileaf = self.data.dict_leaves[iout][igal['id']]
                     if jout in ileaf.nextids.keys():
                         nexts = np.concatenate((nexts, ileaf.nextids[jout]))
-                        self.debugger.debug(f"{prefix} igal[{igal['id']} at {iout}] already calculated fats at {jout}!")
+                        self.data.debugger.debug(f"{prefix} igal[{igal['id']} at {iout}] already calculated fats at {jout}!")
                         calc = False
             if calc:
                 ivel = rms(igal['vx'], igal['vy'], igal['vz'])
                 radii = 5*max(igal['r'],1e-4) + 5*dt*ivel*jsnap.unit['km']
                 neighbors = cut_sphere(jgals, igal['x'], igal['y'], igal['z'], radii, both_sphere=True)
-                self.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} in radii")
+                self.data.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} in radii")
                 
                 
                 if len(neighbors)>0: # candidates at jout
                     neighbors = neighbors[(neighbors['m'] >= igal['m']*masscut_percent/100) & (~np.isin(neighbors['id'], nexts))]
-                    self.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} after masscut {masscut_percent} percent")
+                    self.data.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} after masscut {masscut_percent} percent")
                     if (len(neighbors)>0) and ((len(neighbors)>nnext) or (len(igals)>2*nnext)):
                         _, checkpid = self.data.load_gal(iout, igal['id'], return_part=True, prefix=prefix)
 
@@ -184,19 +184,27 @@ class Leaf():
                         # iout, istep = ioutistep(igal, galaxy=self.galaxy, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep)
                         ith = 0
                         for _, gmpid in zip(gals, gmpids):
-                            if atleast_numba(checkpid, gmpid):
-                                ind = large_isin(checkpid, gmpid)
-                                rate[ith] = howmany(ind, True)/len(checkpid)
+                            try:
+                                if atleast_numba(checkpid, gmpid):
+                                    ind = large_isin(checkpid, gmpid)
+                                    rate[ith] = howmany(ind, True)/len(checkpid)
+                            except Warning:
+                                if atleast_numba(checkpid, gmpid):
+                                    ind = large_isin(checkpid, gmpid)
+                                    rate[ith] = howmany(ind, True)/len(checkpid)
+                                self.data.debugger.debug(f"[NUMBA TEST][load_nextids] -> [atleast_numba(a,b)]:")
+                                self.data.debugger.debug(f"            type(a)={type(checkpid)}, type(a[0])={type(checkpid[0])}")
+                                self.data.debugger.debug(f"            type(b)={type(gmpid)}, type(b[0])={type(gmpid[0])}")
                             ith += 1
                         ind = rate>0
 
                         neighbors, rate = neighbors[ind], rate[ind]
-                        self.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} after crossmatch")
+                        self.data.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} after crossmatch")
                         if len(neighbors) > 0:
                             if len(neighbors) > nnext:
                                 arg = np.argsort(rate)
                                 neighbors = neighbors[arg][-nnext:]
-                                self.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} after score sorting")
+                                self.data.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} after score sorting")
                             nid = neighbors['id']
                             nexts = np.concatenate((nexts, nid))
                         else:
@@ -228,10 +236,10 @@ class Leaf():
         # if not self.nextnids:
         keys = list(self.nextnids.keys())
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
-        clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
+        clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
 
         if self.branch is None:
-            self.debugger.info(f"??? why (L{self.galid} at {self.iout}) lost its branch?")
+            self.data.debugger.info(f"??? why (L{self.galid} at {self.iout}) lost its branch?")
             self.report(prefix=prefix)
             if len(self.otherbranch)>0:
                 self.otherbranch[0].connect(self, prefix=prefix)
@@ -243,19 +251,19 @@ class Leaf():
             if jstep > 0 and jstep <= np.max(self.data.nstep):
                 jout = step2out(jstep, galaxy=self.galaxy, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep)
                 if jout in keys:
-                    self.debugger.info(f"{prefix} *** jout(jstep)={jout}({jstep}) is already calculated!")
+                    self.data.debugger.info(f"{prefix} *** jout(jstep)={jout}({jstep}) is already calculated!")
                     nextnids = self.nextnids[jout]
                 else:
                     nextnids, jout = self.load_nextids(igals, njump=njump, masscut_percent=masscut_percent, nnext=nnext, prefix=prefix, **kwargs)
                     self.nextnids[jout] = nextnids
-                self.debugger.info(f"*** jout(jstep)={jout}({jstep}), nextns={nextnids}")
+                self.data.debugger.info(f"*** jout(jstep)={jout}({jstep}), nextns={nextnids}")
                 if len(nextnids) == 0:
-                    self.debugger.info("JUMP!!")
+                    self.data.debugger.info("JUMP!!")
                     njump += 1
                 else:
                     nextnids = self.branch.update_cands(jout, nextnids, checkids=self.pid, prefix=prefix) # -> update self.branch.candidates & self.branch.scores
                     if len(nextnids) == 0:
-                        self.debugger.info("JUMP!!")
+                        self.data.debugger.info("JUMP!!")
                         njump += 1
                     else:
                         njump = 0
@@ -271,7 +279,7 @@ class Leaf():
 
     def calc_score(self, prefix=""):    # MAIN BOTTLENECK!!
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
-        clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
+        clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
 
         timekeys = self.branch.candidates.keys()
         if self.prog:
@@ -301,20 +309,10 @@ class Leaf():
 
         clock.done()
 
-    # def atleast_leaf(self, otherleaves, checkpid, prefix=""):
-    #     func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
-    #     clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger, level='debug')
-
-    #     ids = tuple(otherleaf.pid for otherleaf in otherleaves)
-    #     val = atleast_numba_para(ids, checkpid)
-
-    #     clock.done()
-    #     return val # True or False
-
     def calc_matchrate(self, otherleaf, checkpid=None, weight=None, checkiout=0, checkid=0, prefix=""):
         # Subject to `calc_score` BOTTLENECK!!
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
-        clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger, level='debug')
+        clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger, level='debug')
 
         if checkiout == 0:
             checkiout = self.iout
@@ -327,7 +325,7 @@ class Leaf():
             igalkeys = list(otherleaf.saved_matchrates[checkiout].keys())
             if checkid in igalkeys:
                 val = otherleaf.saved_matchrates[checkiout][checkid]
-                self.debugger.debug(f"{[prefix]} [{checkid} at {checkiout}] is already saved in [L{otherleaf.galid} at {otherleaf.iout}]")
+                self.data.debugger.debug(f"{[prefix]} [{checkid} at {checkiout}] is already saved in [L{otherleaf.galid} at {otherleaf.iout}]")
             else:
                 calc = True
         else:
@@ -354,7 +352,7 @@ class Leaf():
     def calc_bulkmotion(self, checkind=None, prefix="", **kwargs):
         # Subject to `calc_velocity_offset`
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
-        clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger, level='debug')
+        clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger, level='debug')
 
 
         if checkind is None:
@@ -370,9 +368,9 @@ class Leaf():
         # except Warning as e:
         #     print("WARNING!! in calc_bulkmotion")
         #     breakpoint()
-        #     self.debugger.warning("########## WARNING #########")
-        #     self.debugger.warning(e)
-        #     self.debugger.warning(self.summary())
+        #     self.data.debugger.warning("########## WARNING #########")
+        #     self.data.debugger.warning(e)
+        #     self.data.debugger.warning(self.summary())
         #     raise ValueError("velocity wrong!")
 
         clock.done(add=f"({howmany(checkind, True)})")
@@ -382,7 +380,7 @@ class Leaf():
     def calc_velocity_offset(self, otherleaf, prefix="", **kwargs):
         # Subject to `calc_score`
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
-        clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger, level='debug')
+        clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger, level='debug')
 
         calc = False
         ioutkeys = list(otherleaf.saved_veloffsets.keys())
@@ -390,7 +388,7 @@ class Leaf():
             igalkeys = list(otherleaf.saved_veloffsets[self.iout].keys())
             if self.galid in igalkeys:
                 val = otherleaf.saved_veloffsets[self.iout][self.galid]
-                self.debugger.debug(f"{[prefix]} [{self.galid} at {self.iout}] is already saved in [{otherleaf.galid}] at {otherleaf.iout}]")
+                self.data.debugger.debug(f"{[prefix]} [{self.galid} at {self.iout}] is already saved in [{otherleaf.galid}] at {otherleaf.iout}]")
             else:
                 calc = True
         else:
@@ -406,9 +404,9 @@ class Leaf():
                 # refv = self.calc_bulkmotion(useold=True, prefix=prefix)         # selfvel
                 refv = np.array([self.gal_gm['vx'], self.gal_gm['vy'], self.gal_gm['vz']])
                 inv = otherleaf.calc_bulkmotion(checkind=ind, prefix=prefix) - refv  # invel at self-coo
-                # self.debugger.debug(f"gal{refv}, ref{inv}")
+                # self.data.debugger.debug(f"gal{refv}, ref{inv}")
                 totv = np.array([otherleaf.gal_gm['vx'], otherleaf.gal_gm['vy'], otherleaf.gal_gm['vz']]) - refv # totvel at self-coo
-                # self.debugger.debug(f"gal{otherleaf.gal_gm[['vx','vy','vz']]}, ref{totv}")
+                # self.data.debugger.debug(f"gal{otherleaf.gal_gm[['vx','vy','vz']]}, ref{totv}")
                 val = 1 - nbnorm(totv - inv)/(nbnorm(inv)+nbnorm(totv))
             otherleaf.saved_veloffsets[self.iout][self.galid] = val
 
