@@ -1,12 +1,12 @@
 #   [mode]
 #   Simulation name (should be supported by rur)
-#       hagn:     Horizon-AGN
-#       y01605:   YZiCS 01605
-#       y04466:   YZiCS 04466
+#       "hagn":     Horizon-AGN
+#       "y01605":   YZiCS 01605
+#       "y04466":   YZiCS 04466
 #       ...
-#       y49096:   YZiCS 49096
-#       nh:       NewHorizon
-mode = 'nh'
+#       "y49096":   YZiCS 49096
+#       "nh":       NewHorizon
+mode = "y39990"
 
 #   [galaxy]
 #   Type of data
@@ -31,8 +31,8 @@ prog = True
 #       int ID:   Specific one galaxy
 #       ID list:  Specific several galaxies
 #       tuple:    Use galaxies mass range (minmass, maxmass)
-#usegals = 'all'
-usegals = [57, 96, 233, 162, 274, 297, 326, 404, 511, 443]
+usegals = 'all'
+#usegals = [57, 96, 233, 162, 274, 297, 326, 404, 511, 443]
 
 #   [overwrite]
 #   If tree results already exist, overwrite or not?
