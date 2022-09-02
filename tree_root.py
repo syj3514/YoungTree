@@ -320,7 +320,7 @@ class Treebase():
             return self.dict_gals["galaxymakers"][iout][galid-1]
     
     def load_leaf(self, iout, galid, branch, gal=None, prefix=""):
-        # func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
+        func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
         # clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
 
         if not iout in self.dict_leaves.keys():
@@ -334,6 +334,13 @@ class Treebase():
                 gal = self.load_gal(iout, galid, prefix=prefix)
             self.dict_leaves[iout][galid] = Leaf(gal, branch, self, verbose=self.verbose-1, prefix=prefix, debugger=self.debugger, interplay=branch.interplay, prog=self.prog)
         
+        if self.dict_leaves[iout].pruned:
+            if gal is None:
+                gal = self.load_gal(iout, galid, prefix=prefix)
+            self.dict_leaves[iout][galid] = Leaf(gal, branch, self, verbose=self.verbose-1, prefix=prefix, debugger=self.debugger, interplay=branch.interplay, prog=self.prog)
+
+        branch.connect(self.dict_leaves[iout][galid])
+
         if not branch.rootid in self.dict_leaves[iout][galid].parents:
             self.dict_leaves[iout][galid].parents += [branch.rootid]
         
@@ -342,6 +349,7 @@ class Treebase():
                 self.dict_leaves[iout][galid].otherbranch += [self.dict_leaves[iout][galid].branch]
             self.dict_leaves[iout][galid].branch = branch
         self.dict_leaves[iout][galid].clear_ready=False
+        self.dict_leaves[iout][galid].report(prefix=prefix)
         return self.dict_leaves[iout][galid]
 
 

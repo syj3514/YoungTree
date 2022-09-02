@@ -21,7 +21,7 @@ class Leaf():
 
         self.branch = BranchObj
         self.otherbranch = []
-        self.parents = [self.branch.root['id']]
+        self.parents = [self.branch.rootid]
         self.data = DataObj
         self.mode, self.galaxy = self.branch.mode, self.branch.galaxy
         self.gal_gm = gal
@@ -33,7 +33,7 @@ class Leaf():
         self.nextnids = {}
         self.pruned = False
         self.interplay = interplay
-        prefix += f"<ID{self.galid}:iout(istep)={self.iout}({self.istep})>"
+        prefix += f"<L{self.galid} at {self.iout}>"
 
         # for fast I/O
         self.nparts = 0
@@ -51,13 +51,26 @@ class Leaf():
         # clock.done()
     
     def __del__(self):
-        self.debugger.info(f"[DEL] Leaf (root={self.galid} at {self.iout}) is destroyed")
+        self.debugger.info(f"[DEL] (L{self.galid} at {self.iout}) is destroyed")
 
     def __str__(self):
         if self.branch is None:
-            return f"<Leaf object> {self.data.galstr}{self.galid} at iout{self.iout}\n\troot parents: {self.parents}\n\tPruned!"
-        text = f"<Leaf object> {self.data.galstr}{self.galid} at iout{self.iout}\n\troot parents: {self.parents}\n\tcurrent branch: {self.branch.root['id']}\n\t{self.nparts} {self.data.partstr}s"
+            return f"<Leaf object> {self.data.galstr} (L{self.galid} at {self.iout})\n\troot parents: {self.parents}\n\tPruned!"
+        text = f"<Leaf object> {self.data.galstr} (L{self.galid} at {self.iout})\n\troot parents: {self.parents}\n\tcurrent branch: {self.branch.rootid}\n\t{self.nparts} {self.data.partstr}s"
         return text
+
+    def report(self, prefix=""):
+        func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
+
+        txt = f"{prefix} [L{self.galid} at {self.iout}]\t{self.nparts} particles (pruned? {self.pruned})"
+        self.debugger.debug(txt)
+        txt = f"{prefix} Current branch: {self.branch.rootid if self.branch is not None else None}"
+        self.debugger.debug(txt)
+        txt = f"{prefix} Other branches: {[ib.rootid if ib is not None else None for ib in self.otherbranch]}"
+        self.debugger.debug(txt)
+        txt = f"{prefix} All parents: {self.parents}"
+        self.debugger.debug(txt)
+
 
     def clear(self, msgfrom='self'):
         if len(self.parents)==0:
@@ -75,9 +88,10 @@ class Leaf():
                     for ibranch in self.otherbranch:
                         if ibranch is not None:
                             ibranch.disconnect(self, prefix="[Leaf Clear]")
-                self.otherbranch = None
+                self.otherbranch = []
                 self.pruned = True
             else:
+                self.debugger.info(f"[CLEAR_Ready] Leaf (root={self.galid}) [from {msgfrom}]")
                 self.clear_ready = True
 
     def load_parts(self, prefix=""):
@@ -216,6 +230,12 @@ class Leaf():
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
 
+        if self.branch is None:
+            self.debugger.info(f"??? why (L{self.galid} at {self.iout}) lost its branch?")
+            self.report(prefix=prefix)
+            if len(self.otherbranch)>0:
+                self.otherbranch[0].connect(self, prefix=prefix)
+
         igals = np.atleast_1d(self.gal_gm)
         njump=0
         for i in range(nstep):
@@ -261,6 +281,7 @@ class Leaf():
             
             ith = 0
             for i, ileaf in candidates.items():
+                self.branch.connect(ileaf, prefix=prefix)
                 # try:
                 score0 = self.calc_matchrate(ileaf, checkpid=self.branch.inipid, weight=self.branch.inipwei, prefix=prefix, checkiout=self.branch.rootout, checkid=self.branch.rootid)
                 score1 = self.calc_matchrate(ileaf, checkpid=self.pid, weight=self.pweight, prefix=prefix) # importance weighted matchrate
@@ -306,7 +327,7 @@ class Leaf():
             igalkeys = list(otherleaf.saved_matchrates[checkiout].keys())
             if checkid in igalkeys:
                 val = otherleaf.saved_matchrates[checkiout][checkid]
-                self.debugger.debug(f"{[prefix]} [{checkid}] at iout={checkiout} is already saved in [{otherleaf.galid}] at iout={otherleaf.iout}")
+                self.debugger.debug(f"{[prefix]} [{checkid} at {checkiout}] is already saved in [L{otherleaf.galid} at {otherleaf.iout}]")
             else:
                 calc = True
         else:
@@ -369,7 +390,7 @@ class Leaf():
             igalkeys = list(otherleaf.saved_veloffsets[self.iout].keys())
             if self.galid in igalkeys:
                 val = otherleaf.saved_veloffsets[self.iout][self.galid]
-                self.debugger.debug(f"{[prefix]} [{self.galid}] at iout={self.iout} is already saved in [{otherleaf.galid}] at iout={otherleaf.iout}")
+                self.debugger.debug(f"{[prefix]} [{self.galid} at {self.iout}] is already saved in [{otherleaf.galid}] at {otherleaf.iout}]")
             else:
                 calc = True
         else:
