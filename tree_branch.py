@@ -77,10 +77,10 @@ class Branch():
                 del self.candidates[ikey]
                 del self.scores[ikey]
         self.inipid = None; self.inipwei=None
-        self.data = None
         self.root = None
         self.candidates = {}
         self.disconnect(self.rootleaf, prefix="[Branch Clear]")
+        self.data = None
         self.rootleaf = None
         self.leaves = {}
 
@@ -140,6 +140,7 @@ class Branch():
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
 
         ref = time.time()
+        self.connect(self.rootleaf, prefix=prefix)
         self.go = self.rootleaf.find_candidates(prefix=prefix, **kwargs)
         # dprint(f"*** go? {self.go}", self.data.debugger)
         if len(self.candidates.keys())>0:
@@ -252,9 +253,9 @@ class Branch():
                     return list(self.candidates[iout].keys())
                 else:
                     return []
-            self.data.debugger.debug(f"[NUMBA TEST][update_cands] -> [atleast_numba_para(a,b)]:")
-            self.data.debugger.debug(f"            type(a)={type(gmpids)}, type(a[0])={type(gmpids[0])}")
-            self.data.debugger.debug(f"            type(b)={type(checkids)}, type(b[0])={type(checkids[0])}")
+            # self.data.debugger.debug(f"[NUMBA TEST][update_cands] -> [atleast_numba_para(a,b)]:")
+            # self.data.debugger.debug(f"            type(a)={type(gmpids)}, type(a[0])={type(gmpids[0])}")
+            # self.data.debugger.debug(f"            type(b)={type(checkids)}, type(b[0])={type(checkids[0])}")
             inds = atleast_numba_para(gmpids, checkids)
             for gal, _, ind in zip(gals, gmpids, inds):
                 if ind:
@@ -291,7 +292,7 @@ class Branch():
         dprint_(prefix, self.data.debugger)
         # clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
 
-        leaf.report(prefix=prefix)
+        # leaf.report(prefix=prefix)
         if leaf.branch == self:
             leaf.branch = None
         if self in leaf.otherbranch:
@@ -312,9 +313,9 @@ class Branch():
         # clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
 
         leaf.clear_ready = False
-        isreport = True
+        # isreport = True
         if leaf.pruned:
-            isreport = False
+            # isreport = False
             self.data.load_leaf(leaf.iout, leaf.galid, self, gal=None, prefix=prefix)
         if leaf.branch != self:
             if not leaf.branch in leaf.otherbranch:
@@ -327,8 +328,8 @@ class Branch():
         else:
             if not self.rootid in leaf.parents:
                 leaf.parents.append(self.rootid)
-        if isreport:
-            leaf.report(prefix=prefix)
+        # if isreport:
+        #     leaf.report(prefix=prefix)
 
         # clock.done()
 
