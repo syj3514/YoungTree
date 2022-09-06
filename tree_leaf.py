@@ -75,7 +75,7 @@ class Leaf():
     def clear(self, msgfrom='self'):
         if len(self.parents)==0:
             if self.clear_ready:
-                self.data.debugger.info(f"[CLEAR] Leaf (root={self.galid}) [from {msgfrom}]")
+                self.data.debugger.info(f"[CLEAR] Leaf (L{self.galid} at {self.iout}) [from {msgfrom}]")
                 self.pid=None; self.pm=None; self.pweight=None
                 self.px=None; self.py=None; self.py=None
                 self.pvx=None; self.pvy=None; self.pvy=None
@@ -91,7 +91,7 @@ class Leaf():
                 self.otherbranch = []
                 self.pruned = True
             else:
-                self.data.debugger.info(f"[CLEAR_Ready] Leaf (root={self.galid}) [from {msgfrom}]")
+                self.data.debugger.info(f"[CLEAR_Ready] Leaf (L{self.galid} at {self.iout}) [from {msgfrom}]")
                 self.clear_ready = True
 
     def load_parts(self, prefix=""):
@@ -192,9 +192,9 @@ class Leaf():
                                 if atleast_numba(checkpid, gmpid):
                                     ind = large_isin(checkpid, gmpid)
                                     rate[ith] = howmany(ind, True)/len(checkpid)
-                                self.data.debugger.debug(f"[NUMBA TEST][load_nextids] -> [atleast_numba(a,b)]:")
-                                self.data.debugger.debug(f"            type(a)={type(checkpid)}, type(a[0])={type(checkpid[0])}")
-                                self.data.debugger.debug(f"            type(b)={type(gmpid)}, type(b[0])={type(gmpid[0])}")
+                                # self.data.debugger.debug(f"[NUMBA TEST][load_nextids] -> [atleast_numba(a,b)]:")
+                                # self.data.debugger.debug(f"            type(a)={type(checkpid)}, type(a[0])={type(checkpid[0])}")
+                                # self.data.debugger.debug(f"            type(b)={type(gmpid)}, type(b[0])={type(gmpid[0])}")
                             ith += 1
                         ind = rate>0
 
@@ -278,7 +278,7 @@ class Leaf():
     
 
     def calc_score(self, prefix=""):    # MAIN BOTTLENECK!!
-        func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
+        func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func} from [L{self.galid} at {self.iout}]"
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
 
         timekeys = self.branch.candidates.keys()
@@ -325,7 +325,7 @@ class Leaf():
             igalkeys = list(otherleaf.saved_matchrates[checkiout].keys())
             if checkid in igalkeys:
                 val = otherleaf.saved_matchrates[checkiout][checkid]
-                self.data.debugger.debug(f"{[prefix]} [{checkid} at {checkiout}] is already saved in [L{otherleaf.galid} at {otherleaf.iout}]")
+                self.data.debugger.debug(f"{[prefix]} [G{checkid} at {checkiout}] is already saved in [L{otherleaf.galid} at {otherleaf.iout}]")
             else:
                 calc = True
         else:
@@ -388,7 +388,7 @@ class Leaf():
             igalkeys = list(otherleaf.saved_veloffsets[self.iout].keys())
             if self.galid in igalkeys:
                 val = otherleaf.saved_veloffsets[self.iout][self.galid]
-                self.data.debugger.debug(f"{[prefix]} [{self.galid} at {self.iout}] is already saved in [{otherleaf.galid}] at {otherleaf.iout}]")
+                self.data.debugger.debug(f"{[prefix]} [L{self.galid} at {self.iout}] is already saved in [L{otherleaf.galid}] at {otherleaf.iout}]")
             else:
                 calc = True
         else:
