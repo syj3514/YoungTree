@@ -1,7 +1,6 @@
 import inspect
 import gc
 import copy
-from types import NoneType
 
 from tree_utool import *
 from tree_leaf import Leaf
@@ -301,8 +300,9 @@ class Branch():
         if self.rootid in leaf.parents:
             leaf.parents.remove(self.rootid)
         if len(leaf.parents)>0 and len(leaf.otherbranch)>0:
-            leaf.branch = leaf.otherbranch[0]
-            self.data.debugger.debug(f"{prefix} (L{leaf.galid} at {leaf.iout}) changes its parent {self.rootid} -> {leaf.otherbranch[0].rootid}")
+            if hasattr(leaf.leaf.otherbranch[0], "rootid"):
+                leaf.branch = leaf.otherbranch[0]
+                self.data.debugger.debug(f"{prefix} (L{leaf.galid} at {leaf.iout}) changes its parent {self.rootid} -> {leaf.otherbranch[0].rootid}")
         leaf.clear(msgfrom="disconnect of branch")
         leaf.report(prefix=prefix)
 
@@ -320,7 +320,7 @@ class Branch():
             self.data.load_leaf(leaf.iout, leaf.galid, self, gal=None, prefix=prefix)
         if leaf.branch != self:
             if not leaf.branch in leaf.otherbranch:
-                if not isinstance(leaf.branch, NoneType):
+                if hasattr(leaf.branch, "rootid"):
                     leaf.otherbranch.append(leaf.branch)
                     self.data.debugger.debug(f"{prefix} (L{leaf.galid} at {leaf.iout}) changes its parent {leaf.branch.rootid} -> {self.rootid}")
             
