@@ -9,6 +9,12 @@ from tree_leaf import Leaf
 ###############         Branch Class                #####
 #########################################################
 class Branch():
+    __slots__ = [
+        'verbose', 'data','root','rootid','galaxy','mode', 'rootout',
+        'rootid', 'rootstep', 'key', 'repo', 'rurmode', 'interplay', 'candidates',
+        'scores','score0s','score1s','score2s','score3s','rootleaf',
+        'inipid','inipwei','leaves','leave_scores','secrecord','go','prog','progstr'
+        ]
     def __init__(self, root, DataObj, galaxy=True, mode='hagn', verbose=2, prefix="", debugger=None, interplay=False,prog=True, **kwargs):
         func = f"[__Branch__]"; prefix = f"{prefix}{func}"
         clock = timer(text=prefix, verbose=verbose, debugger=debugger)
@@ -60,6 +66,77 @@ class Branch():
 
         clock.done()
     
+    def name(self):
+        return (self.rootout, self.rootid)
+
+    def export_backup(self, prefix=""):
+        func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func} <B{self.rootid} at {self.rootout}>"
+        clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
+        # What only I have
+        #   Unchanged
+        #       rootid, rootout, rootstep, inipid, inipwei, rootleaf
+        #   Changed
+        #       candidates, scores, score0s, score1s, score2s, score3s, leaves, leave_scores, secrecord, go
+        #   From data
+        #       verbose, data, galaxy, mode, key, repo, rurmode, interplay, prog, progstr
+
+        # root.make_branches  <- iout, galid, interplay   [needs: rootout, rootid, (interplay)]
+        # and then, changed:
+        name = self.name()
+        status = {
+            "candidates":tuple(self.candidates[iout][galid].name() for iout in self.candidates.keys() for galid in self.candidates[iout]),
+            "scores":tuple((iout, galid, self.scores[iout][galid]) for iout in self.scores.keys() for galid in self.scores[iout]),
+            "score0s":tuple((iout, galid, self.score0s[iout][galid]) for iout in self.score0s.keys() for galid in self.score0s[iout]),
+            "score1s":tuple((iout, galid, self.score1s[iout][galid]) for iout in self.score1s.keys() for galid in self.score1s[iout]),
+            "score2s":tuple((iout, galid, self.score2s[iout][galid]) for iout in self.score2s.keys() for galid in self.score2s[iout]),
+            "score3s":tuple((iout, galid, self.score3s[iout][galid]) for iout in self.score3s.keys() for galid in self.score3s[iout]),
+            "leaves_and_scores":tuple((iout, self.leaves[iout]['id'], self.leave_scores[iout]) for iout in self.leaves.keys()),
+            "secrecord":self.secrecord,
+            "go":self.go
+            }
+        
+        clock.done()
+        return name, status
+    
+    def import_backup(self, status, prefix=""):
+        func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func} <B{self.rootid} at {self.rootout}>"
+        clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
+
+        cands = np.array(status["candidates"])
+        iouts = np.unique(cands[:,0])
+        for iout in iouts:
+            galids = cands[:,1][cands[:,0]==iout]
+            self.update_cands(self, iout, np.atleast_1d(galids),checkids=None, prefix=prefix)
+        
+        zips = zip(status["scores"], status["score0s"], status["score1s"], status["score2s"], status["score3s"])
+        for scores, score0s, score1s, score2s, score3s in zips:
+            iout, galid, score = scores
+            if not iout in self.scores.keys():
+                self.scores[iout] = {}
+                self.score0s[iout] = {}
+                self.score1s[iout] = {}
+                self.score2s[iout] = {}
+                self.score3s[iout] = {}
+            _, _, score0 = score0s
+            _, _, score1 = score1s
+            _, _, score2 = score2s
+            _, _, score3 = score3s
+            self.scores[iout][galid] = score
+            self.score0s[iout][galid] = score0
+            self.score1s[iout][galid] = score1
+            self.score2s[iout][galid] = score2
+            self.score3s[iout][galid] = score3
+        
+        for iout, galid, score in status["leaves_and_scores"]:
+            self.leaves[iout] = self.data.load_gal(iout, galid)
+            self.leave_scores[iout] = score
+        
+        self.secrecord = status["secrecord"]
+        self.go = status["go"]
+
+        clock.done()
+
+
     def __del__(self):
         self.data.debugger.info(f"[DEL] Branch (root={self.rootid}) is destroyed")
 
@@ -253,9 +330,9 @@ class Branch():
                     return list(self.candidates[iout].keys())
                 else:
                     return []
-            # self.data.debugger.debug(f"[NUMBA TEST][update_cands] -> [atleast_numba_para(a,b)]:")
-            # self.data.debugger.debug(f"            type(a)={type(gmpids)}, type(a[0])={type(gmpids[0])}")
-            # self.data.debugger.debug(f"            type(b)={type(checkids)}, type(b[0])={type(checkids[0])}")
+            self.data.debugger.debug(f"[NUMBA TEST][update_cands] -> [atleast_numba_para(a,b)]:")
+            self.data.debugger.debug(f"            type(a)={type(gmpids)}, type(a[0])={type(gmpids[0])}")
+            self.data.debugger.debug(f"            type(b)={type(checkids)}, type(b[0])={type(checkids[0])}")
             inds = atleast_numba_para(gmpids, checkids)
             for gal, _, ind in zip(gals, gmpids, inds):
                 if ind:
@@ -300,7 +377,7 @@ class Branch():
         if self.rootid in leaf.parents:
             leaf.parents.remove(self.rootid)
         if len(leaf.parents)>0 and len(leaf.otherbranch)>0:
-            if hasattr(leaf.leaf.otherbranch[0], "rootid"):
+            if hasattr(leaf.otherbranch[0], "rootid"):
                 leaf.branch = leaf.otherbranch[0]
                 self.data.debugger.debug(f"{prefix} (L{leaf.galid} at {leaf.iout}) changes its parent {self.rootid} -> {leaf.otherbranch[0].rootid}")
         leaf.clear(msgfrom="disconnect of branch")

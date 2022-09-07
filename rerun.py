@@ -11,13 +11,11 @@ from tree_root import Treebase
 import params
 
 
-p = {}
-for key in params.__dict__.keys():
-    if not "_" in key:
-        p[key] = params.__dict__[key]
-    p["flush_GB"] = params.flush_GB
-p = DotDict(p)
 
+fname = input("`./log/{  }_ini.log.params` file: ") #########################
+fname = f"./log/{fname}_ini.log.params"
+p = pklload(fname) #########################
+p.logprefix = f"re_{p.logprefix}"
 #########################################################
 ###############         Targets                ##########
 #########################################################
@@ -64,12 +62,13 @@ if p.iout == -1:
 progstr = "Descendant"
 if p.prog:
     progstr = "Progenitor"
-message = f"< YoungTree >\nfinding {progstr}s\nUsing {modename} {galstr}\n{len(nout)} outputs are found! ({nout[-1]}~{nout[0]})\n"
+message = f"< YoungTree >\n[Re-Run] finding {progstr}s\n[Re-Run] Using {modename} {galstr}\n[Re-Run] {len(nout)} outputs are found! ({nout[-1]}~{nout[0]})\n"
 #########################################################
 ###############         Debugger                #########
 #########################################################
 debugger = None
 fname = make_logname(p.mode, -1, logprefix=p.logprefix)
+# pklsave(p, f"{fname}.params") #########################
 
 debugger = custom_debugger(fname, detail=p.detail)
 debugger.info(message)
@@ -85,15 +84,15 @@ snap_now.clear()
 
 if p.usegals == 'all':
     targets = gals_now
-    message = f"All {galstrs}\n>>> {len(targets)} {galstrs} are loaded"
+    message = f"[Re-Run] All {galstrs}\n>>> {len(targets)} {galstrs} are loaded"
     loadall = True
 else:
     loadall = False
     if isinstance(p.usegals, int):
-        message = f"Single {galstr}\n>>> {galstr} (ID={p.usegals}) is loaded"
+        message = f"[Re-Run] Single {galstr}\n>>> {galstr} (ID={p.usegals}) is loaded"
         targets = gals_now[p.usegals - 1]
     elif isinstance(p.usegals, list):
-        message = f"Multiple {galstrs}\n>>> {len(p.usegals)} {galstrs} are loaded\n\t(IDs={''.join([f'{p.usegals[i]}, ' if i<min(3,len(p.usegals)) else f', {p.usegals[i]}' if (i>max(3,len(p.usegals))-3) else '...' if i==min(3,len(p.usegals)) else '' for i in range(len(p.usegals))])})"
+        message = f"[Re-Run] Multiple {galstrs}\n>>> {len(p.usegals)} {galstrs} are loaded\n\t(IDs={''.join([f'{p.usegals[i]}, ' if i<min(3,len(p.usegals)) else f', {p.usegals[i]}' if (i>max(3,len(p.usegals))-3) else '...' if i==min(3,len(p.usegals)) else '' for i in range(len(p.usegals))])})"
         ind = np.array(p.usegals, dtype=int)
         targets = gals_now[ind - 1]
     elif isinstance(p.usegals, tuple):
@@ -115,28 +114,38 @@ if not os.path.isdir(f"./result/{p.mode}"):
 
 if p.overwrite:
     fnames = [f"./result/{p.mode}/{progstr}_Branch_ID{target['id']:07d}_iout{p.iout:05d}.pickle" for target in targets]
-    ind = np.isin(fnames, os.listdir("./result"))    
-    if howmany(ind,True)>0:
-        debugger.info(f"I find {howmany(ind, True)} of {len(targets)} saved files! --> Use {howmany(ind, False)} {galstrs}\n")
-        print(f"I find {howmany(ind, True)} of {len(targets)} saved files! --> Use {howmany(ind, False)} {galstrs}\n")
-        targets = targets[~ind]
-    p["saved_ind"] = ind
+    if p["saved_ind"] is not None:
+        ind = p["saved_ind"]
+    else:
+        ind = np.isin(fnames, os.listdir("./result"))    
+        if howmany(ind,True)>0:
+            debugger.info(f"I find {howmany(ind, True)} of {len(targets)} saved files! --> Use {howmany(ind, False)} {galstrs}\n")
+            print(f"I find {howmany(ind, True)} of {len(targets)} saved files! --> Use {howmany(ind, False)} {galstrs}\n")
+            targets = targets[~ind]
 else:
-    p["saved_ind"] = None
     debugger.info(" ")
     print()
+        
 
-pklsave(p, f"{fname}.params", overwrite=True)
 
 
 #########################################################
 ###############         Tree Making                ######
 #########################################################
 debugger.info(f"\nAllow {p.flush_GB:.2f} GB Memory")
-print(f"Allow {p.flush_GB:.2f} GB Memory")
+print(f"[Re-Run] Allow {p.flush_GB:.2f} GB Memory")
+
+jout = input("[Re-Run] When do you want to go back? (jout): ")
+backupfname = make_logname(p.mode, int(jout), logprefix=p.logprefix[3:], overwrite=True)
+print(backupfname)
+if backupfname[:3] == "re_":
+    backupfname = backupfname[3:]
+backup_dict = pklload(f"{backupfname}.pickle")
+
 
 MyTree = Treebase(simmode=p.mode, debugger=debugger, verbose=0, flush_GB=p.flush_GB, loadall=loadall, prog=p.prog, detail=p.detail, logprefix=p.logprefix)
-
+print(backup_dict['Root']["snapkeys"])
+MyTree.import_backup(backup_dict["Root"])
 
 destination = np.min(nout) if p.prog else np.max(nout)
 print(f"\nStart making {progstr} from {p.iout} to {destination}\nSee {fname} (detail debugging = {p.detail})\nRunning...\n\n")
@@ -144,5 +153,5 @@ print(f"\nStart making {progstr} from {p.iout} to {destination}\nSee {fname} (de
 #########################################################
 ###############         Execution                ########
 #########################################################
-MyTree.queue(p.iout, targets)
+MyTree.queue(p.iout, targets, backup_dict=backup_dict)
 print("\nDone\n")

@@ -21,9 +21,9 @@ from tree_leaf import Leaf
 class Treebase():
     __slots__ = ['iniGB', 'iniMB', 'flush_GB', 'simmode', 'galaxy', 'logprefix', 'detail',
                 'partstr', 'Partstr', 'galstr', 'Galstr','verbose', 'debugger',
-                'rurmode', 'repo',
+                'rurmode', 'repo', 'initial_out', 'initial_galids', 'treeleng', 'interplay',
                 'loadall','nout','nstep',
-                'dict_snap','dict_part','dict_gals','dict_leaves', 'dict_nexts', 'branches_queue', 'prog']
+                'dict_snap','dict_part','dict_gals','dict_leaves', 'branches_queue', 'prog']
     def __init__(self, simmode='hagn', galaxy=True, flush_GB=50, verbose=2, debugger=None, loadall=False, prefix="", prog=True, logprefix="output_", detail=True):
         func = f"[__Treebase__]"; prefix = f"{prefix}{func}"
         clock = timer(text=prefix, verbose=verbose, debugger=debugger)
@@ -60,19 +60,62 @@ class Treebase():
             self.repo = "/storage6/NewHorizon"
 
         self.loadall = loadall
+        self.initial_galids = np.array([])
+        self.treeleng = None
+        self.interplay = False
         self.nout = load_nout(mode=self.simmode, galaxy=self.galaxy)
         self.nstep = load_nstep(mode=self.simmode, galaxy=self.galaxy, nout=self.nout)
         self.dict_snap = {} # in {iout}, RamsesSnapshot object
         self.dict_part = {} # in {iout}, in {galid}, Particle object
         self.dict_gals = {"galaxymakers":{}, "gmpids":{}} # in each key, in {iout}, Recarray obejct
         self.dict_leaves = {} # in {iout}, in {galid}, Leaf object
-        self.dict_nexts = {}
-        # self.saved_out = {"snap":[], "gal":[], "part":[]}
         self.branches_queue = {}
         self.prog = prog
+        self.initial_out = np.max(self.nout) if prog else np.min(self.nout)
         gc.collect()
 
         clock.done()
+
+    def export_backup(self, prefix=""):
+        func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
+        clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
+
+        # frominit = {
+        #     "simmode":self.simmode, "galaxy":self.galaxy, "flush_GB":self.flush_GB, "verbose":self.verbose, "loadall":self.loadall,
+        #     "prog":self.prog, "detail":self.detail, "logprefix":self.logprefix
+        #     }
+        # fromqueue = {
+        #     "initial_out":self.initial_out, "initial_galids":self.initial_galids, "treeleng":self.treeleng, "interplay":self.interplay
+        #     }
+        status = {
+            "snapkeys":list(self.dict_snap.keys()), 
+            "partkeys":list((iout, galid) for iout in self.dict_part.keys() for galid in self.dict_part[iout].keys()),
+            "galskeys":list(iout for iout in self.dict_gals['galaxymakers'].keys()),
+            "branches_queue":list(ib for ib in self.branches_queue.keys())
+        }
+        clock.done()
+        # return frominit, fromqueue, status
+        return status
+    
+    def import_backup(self, status, prefix=""): # may not used
+        func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
+        clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
+
+        for key in status["snapkeys"]:
+            self.load_snap(key)
+        
+        for iout, galid in status["partkeys"]:
+            self.load_part(iout, galid, galaxy=self.galaxy)
+        
+        for iout in status["galskeys"]:
+            self.load_gal(iout, galid='all')
+        
+        galids = np.array([ib for ib in status['branches_queue']])
+        self.make_branches(self.initial_out, galids=galids)
+
+        clock.done()
+
+
 
     def summary(self, isprint=False):
         temp = [f"{key}({sys.getsizeof(self.dict_snap[key].part_data) / 2**20:.2f} MB) | " for key in self.dict_snap.keys()]
@@ -105,7 +148,7 @@ class Treebase():
         return text
         
         
-    def make_branches(self, iout, galids=None, interplay=False, prefix=""):
+    def make_branches(self, iout, galids=None, prefix=""):
         # Subject to queue
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
@@ -113,17 +156,21 @@ class Treebase():
         gals = self.load_gal(iout, galid=galids, prefix=prefix)
 
         for gal in gals:
-            self.branches_queue[gal['id']]=Branch(gal, self, galaxy=self.galaxy, mode=self.simmode, verbose=self.verbose, prefix=prefix, debugger=self.debugger, interplay=False, prog=self.prog)
+            self.branches_queue[gal['id']]=Branch(gal, self, galaxy=self.galaxy, mode=self.simmode, verbose=self.verbose, prefix=prefix, debugger=self.debugger, interplay=self.interplay, prog=self.prog)
 
         clock.done()
 
-    def queue(self, iout, gals, treeleng=None, interplay=False, prefix=""):
+    def queue(self, iout, gals, treeleng=None, interplay=False, prefix="", backup_dict=None):
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
 
+        self.initial_out = iout
+        self.initial_galids = gals['id']
+        self.treeleng = treeleng
+        self.interplay = interplay
         self.nout = self.nout[self.nout<=iout] if self.prog else self.nout[self.nout>=iout]
 
-        self.make_branches(iout, gals['id'], interplay=interplay, prefix=prefix)
+        self.make_branches(iout, gals['id'], prefix=prefix)
         self.debugger.info(f"{prefix}\n{self.summary()}")
         try:
             go=True
@@ -132,7 +179,39 @@ class Treebase():
                 outs = self.nout
             else:
                 outs = self.nout[::-1]
+            
+            
+            if backup_dict is not None:
+                jout = backup_dict["Queue"]['jout']
+                if self.prog:
+                    outs = outs[outs < jout]
+                else:
+                    outs = outs[outs > jout]
+                self.debugger.info(f"{prefix} Load from {jout} BACKUP")
+                ntree = backup_dict["Queue"]['ntree']
+                go = backup_dict["Queue"]['go']
+
+                self.debugger.info(f"{prefix} Branch restoration...")
+                branchkeys = np.array(backup_dict["Branch"].keys())
+                for key in self.branches_queue.keys():
+                    if not key in branchkeys:
+                        self.branches_queue[key] = None
+                        del self.branches_queue[key]
+                    else:
+                        self.branches_queue[key].import_backup(backup_dict["Branch"][(iout, key)])
+                self.debugger.info(f"{prefix} Leaf restoration...")
+                for iiout in backup_dict["Leaf"].keys():
+                    for name in backup_dict["Leaf"][iiout]:
+                        lout, lid = name
+                        status_leaf = backup_dict["Leaf"][iiout][lid]
+                        branch = self.branches_queue[status_leaf["branch"][1]]
+                        leaf = self.load_leaf(lout, lid, branch)
+                        leaf.import_backup(status_leaf)
+
+
+
             for jout in outs:
+                backup_dict = {}
                 fname = make_logname(self.simmode, jout, logprefix=self.logprefix)
                 self.debugger.handlers = []
                 self.debugger = custom_debugger(fname, detail=self.detail)
@@ -156,6 +235,40 @@ class Treebase():
                         go=False
                 if not go:
                     break
+                # frominit, fromqueue, status = self.export_backup()
+                status = self.export_backup()
+                # backup_dict["Root_initial"]=frominit
+                # backup_dict["Root_queue"]=fromqueue
+                # backup_dict["Root_status"]=status
+                backup_dict["Queue"] = {"ntree":ntree, "go":go, "jout":jout}
+                backup_dict["Root"] = status
+                
+                backup_dict["Branch"] = {}
+                keys = list( self.branches_queue.keys() )
+                for key in keys:
+                    branch = self.branches_queue[key]
+                    name, status_ib = branch.export_backup()
+                    backup_dict["Branch"][name] = status_ib
+                
+                backup_dict["Leaf"] = {}
+                iouts = list( self.dict_leaves.keys() )
+                for iiout in iouts:
+                    backup_dict["Leaf"][iiout] = {}
+                    galids = list( self.dict_leaves[iiout].keys() )
+                    for galid in galids:
+                        leaf = self.dict_leaves[iiout][galid]
+                        name, status_leaf = leaf.export_backup()
+                        backup_dict["Leaf"][iiout][name] = status_leaf
+                pklsave(backup_dict, f"{fname}.pickle")
+
+
+                # for key in keys:
+                #     branch = self.branches_queue[key]
+                #     name, status_ib = branch.export_backup()
+                #     backup_dict["Branch"][name] = status_ib
+                
+
+
         except Exception as e:
             print(traceback.format_exc())
             print(e)
@@ -180,12 +293,14 @@ class Treebase():
         keys = list( self.dict_part.keys() )
         if len(keys)>0:
             cout = max(np.min(keys), cout) if self.prog else min(np.max(keys), cout)
+        cstep = out2step(cout, galaxy=self.galaxy, mode=self.simmode, nout=self.nout, nstep=self.nstep)
         
         # Snapshot
         keys = list( self.dict_snap.keys() )
         if len(keys)>0:
             for iout in keys:
-                if (iout > cout+5 and self.prog) or (iout < cout-5 and not self.prog):
+                istep = out2step(iout, galaxy=self.galaxy, mode=self.simmode, nout=self.nout, nstep=self.nstep)
+                if (istep > cstep+5 and self.prog) or (istep < cstep-5 and not self.prog):
                     refmem = MB()
                     self.dict_snap[iout].clear()
                     self.dict_snap[iout] = None
@@ -196,7 +311,8 @@ class Treebase():
         keys = list( self.dict_gals["galaxymakers"].keys() )
         if len(keys)>0:
             for iout in keys:
-                if (iout > cout+5 and self.prog) or (iout < cout-5 and not self.prog):
+                istep = out2step(iout, galaxy=self.galaxy, mode=self.simmode, nout=self.nout, nstep=self.nstep)
+                if (istep > cstep+5 and self.prog) or (istep < cstep-5 and not self.prog):
                     refmem = MB()
                     self.dict_gals['galaxymakers'][iout] = None
                     self.dict_gals['gmpids'][iout] = None
@@ -208,7 +324,8 @@ class Treebase():
         keys = list( self.dict_part.keys() )
         if len(keys)>0:
             for iout in keys:
-                if (iout > cout+5 and self.prog) or (iout < cout-5 and not self.prog):
+                istep = out2step(iout, galaxy=self.galaxy, mode=self.simmode, nout=self.nout, nstep=self.nstep)
+                if (istep > cstep+5 and self.prog) or (istep < cstep-5 and not self.prog):
                     jkeys = list(self.dict_part[iout].keys())
                     for galid in jkeys:
                         refmem = MB()
@@ -227,7 +344,8 @@ class Treebase():
         keys = list( self.dict_leaves.keys() )
         if len(keys)>0:
             for iout in keys:
-                if (iout > cout+5 and self.prog) or (iout < cout-5 and not self.prog):
+                istep = out2step(iout, galaxy=self.galaxy, mode=self.simmode, nout=self.nout, nstep=self.nstep)
+                if (istep > cstep+5 and self.prog) or (istep < cstep-5 and not self.prog):
                     jkeys = list(self.dict_leaves[iout].keys())
                     for galid in jkeys:
                         if len(self.dict_leaves[iout][galid].parents)==0:

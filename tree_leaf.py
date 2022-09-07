@@ -58,6 +58,54 @@ class Leaf():
             return f"<Leaf object> {self.data.galstr} (L{self.galid} at {self.iout})\n\troot parents: {self.parents}\n\tPruned!"
         text = f"<Leaf object> {self.data.galstr} (L{self.galid} at {self.iout})\n\troot parents: {self.parents}\n\tcurrent branch: {self.branch.rootid}\n\t{self.nparts} {self.data.partstr}s"
         return text
+    
+    def name(self):
+        return (self.iout, self.galid)
+    
+    def export_backup(self, prefix=""):
+        func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func} <L{self.galid} at {self.iout}>"
+        clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
+
+        name = self.name()
+        status = {
+            "branch":self.branch.name() if self.branch is not None else None,
+            "otherbranch":[ibranch.name() if ibranch is not None else None for ibranch in self.otherbranch],
+            "parents":self.parents,
+            "clear_ready":self.clear_ready,
+            "nextids":self.nextids,
+            "nextnids":self.nextnids,
+            "pruned":self.pruned,
+            "saved_matchrates":self.saved_matchrates,
+            "saved_veloffsets":self.saved_veloffsets,
+            }
+
+        clock.done()
+        return name, status
+    
+    def import_backup(self, status, prefix=""):
+        func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func} <L{self.galid} at {self.iout}>"
+        clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
+
+        if not status['branch'] is None:
+            self.branch = self.data.branches_queue(status['branch'][1])
+        
+        for ib in status["otherbranch"]:
+            if ib is not None:
+                self.otherbranch.append(self.data.branches_queue(ib[1]))
+            else:
+                self.otherbranch.append(ib)
+        
+        self.parents=status["parents"]
+        self.clear_ready=status["clear_ready"]
+        self.nextids=status["nextids"]
+        self.nextnids=status["nextnids"]
+        self.pruned=status["pruned"]
+        self.saved_matchrates=status["saved_matchrates"]
+        self.saved_veloffsets=status["saved_veloffsets"]
+
+        clock.done()
+
+        
 
     def report(self, prefix=""):
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"

@@ -7,6 +7,19 @@ import numpy as np
 import numba as nb
 from collections.abc import Iterable
 
+class DotDict(dict):
+    """dot.notation access to dictionary attributes"""
+    def __getattr__(self, attr):
+        return self.get(attr)
+    __setattr__= dict.__setitem__
+    __delattr__= dict.__delitem__
+
+    def __getstate__(self):
+        return self
+
+    def __setstate__(self, state):
+        self.update(state)
+        self.__dict__ = self
 
 class timer():
     __slots__ = ['ref', 'units', 'corr', 'unit', 'text', 'verbose', 'debugger', 'level']
@@ -40,7 +53,7 @@ class timer():
             else:
                 self.debugger.debug(f"{self.text} Done ({elapse/self.corr:.3f} {self.unit})")
 
-def make_logname(mode, iout, dirname='./log', logprefix=None):
+def make_logname(mode, iout, dirname='./log', logprefix=None, overwrite=False):
     if not os.path.isdir(dirname):
         os.mkdir(dirname)
     if logprefix is None:
@@ -50,7 +63,7 @@ def make_logname(mode, iout, dirname='./log', logprefix=None):
         fname = f"{dirname}/{logprefix}{mode}_ini.log"
     else:
         fname = f"{dirname}/{logprefix}{mode}_{iout:05d}.log"
-    if os.path.isfile(fname):
+    if os.path.isfile(fname) and (not overwrite):
         num = 1
         while os.path.isfile(fname):
             if iout<0:
@@ -317,15 +330,19 @@ def atleast_numba(a, b):
             return True
     # return result.reshape(shape)
 
-@nb.jit(fastmath=True, parallel=True)
+@nb.jit(fastmath=True, parallel=True, nopython=True)
 def atleast_numba_para(aa, b):
     '''
     Return True if any element of a is in b
     '''
-    nn = len(aa)
+    # nn = len(aa) # <- Fall-back from the nopython compilation path to the object mode compilation path has been detected, this is deprecated behaviour.
+    nn = len(aa) # <- Function "atleast_numba_para" was compiled in object mode without forceobj=True, but has lifted loops.
     results = np.full(nn, False)
-    # results = np.zeros(nn, dtype=bool)
-    for j in nb.prange(nn):
+    
+    # for j in nb.prange(nn): <--- Fall-back from the nopython compilation path to the object mode compilation path has been detected, this is deprecated behaviour.
+    # for j in nb.prange(nn): <--- Function "atleast_numba_para" was compiled in object mode without forceobj=True.
+    # for j in nb.prange(nn): <--- Compilation is falling back to object mode WITHOUT looplifting enabled because Function "atleast_numba_para" failed type inference due to: non-precise type pyobject
+    for j in nb.prange(nn): # <--- Compilation is falling back to object mode WITHOUT looplifting enabled because Function "atleast_numba_para" failed type inference due to: Cannot determine Numba type of <class 'numba.core.dispatcher.LiftedLoop'>
         a = aa[j]
         n = len(a)
         set_b = set(b)
