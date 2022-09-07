@@ -193,7 +193,8 @@ class Treebase():
 
                 self.debugger.info(f"{prefix} Branch restoration...")
                 branchkeys = np.array(backup_dict["Branch"].keys())
-                for key in self.branches_queue.keys():
+                keys = list(self.branches_queue.keys())
+                for key in keys:
                     if not key in branchkeys:
                         self.branches_queue[key] = None
                         del self.branches_queue[key]
