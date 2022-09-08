@@ -21,9 +21,9 @@ class Leaf():
 
         self.branch = BranchObj
         self.otherbranch = []
-        self.parents = [self.branch.rootid]
+        self.parents = [self.branch.rootid] if self.branch is not None else []
         self.data = DataObj
-        self.mode, self.galaxy = self.branch.mode, self.branch.galaxy
+        self.mode, self.galaxy = self.data.simmode, self.data.galaxy
         self.gal_gm = gal
         self.clear_ready = False
         self.galid, self.iout = self.gal_gm['id'], self.gal_gm['timestep']
@@ -87,11 +87,11 @@ class Leaf():
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
 
         if not status['branch'] is None:
-            self.branch = self.data.branches_queue(status['branch'][1])
+            self.branch = self.data.branches_queue[status['branch'][1]]
         
         for ib in status["otherbranch"]:
             if ib is not None:
-                self.otherbranch.append(self.data.branches_queue(ib[1]))
+                self.otherbranch.append(self.data.branches_queue[ib[1]])
             else:
                 self.otherbranch.append(ib)
         

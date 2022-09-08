@@ -6,6 +6,7 @@ youngtree_test_backup.ipynb
 **/data/**
 **/images/**
 **/result/**
+**/log/**
 *test*
 youngtree_test.ipynb
 *_excution.py
@@ -17,3 +18,4 @@ params.py
 requirements.txt
 tree_drawer.ipynb
 youngtree_compare.ipynb
+log/0908_nh_ini.log.params

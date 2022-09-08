@@ -84,6 +84,7 @@ class Branch():
         # and then, changed:
         name = self.name()
         status = {
+            "rootleaf":self.rootleaf.name(),
             "candidates":tuple(self.candidates[iout][galid].name() for iout in self.candidates.keys() for galid in self.candidates[iout]),
             "scores":tuple((iout, galid, self.scores[iout][galid]) for iout in self.scores.keys() for galid in self.scores[iout]),
             "score0s":tuple((iout, galid, self.score0s[iout][galid]) for iout in self.score0s.keys() for galid in self.score0s[iout]),
@@ -102,11 +103,22 @@ class Branch():
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func} <B{self.rootid} at {self.rootout}>"
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
 
+        self.rootleaf = self.data.load_leaf(*status["rootleaf"], self, prefix=prefix)
         cands = np.array(status["candidates"])
         iouts = np.unique(cands[:,0])
         for iout in iouts:
             galids = cands[:,1][cands[:,0]==iout]
-            self.update_cands(self, iout, np.atleast_1d(galids),checkids=None, prefix=prefix)
+            self.update_cands(iout, np.atleast_1d(galids),checkids=None, prefix=prefix)
+        
+        iouts = list(self.candidates.keys())
+        if self.rootout in iouts:
+            ids = list(self.candidates[self.rootout].keys())
+            if len(ids)>0:
+                for iid in ids:
+                    self.disconnect(self.candidates[self.rootout][iid], prefix=prefix)
+                    del self.candidates[self.rootout][iid]
+            del self.candidates[self.rootout]
+            
         
         zips = zip(status["scores"], status["score0s"], status["score1s"], status["score2s"], status["score3s"])
         for scores, score0s, score1s, score2s, score3s in zips:
@@ -184,11 +196,17 @@ class Branch():
         temp = " | ".join(temp)
         tbranch = "\n\t".join(textwrap.wrap(temp, 50))
         
-        temp = []
-        for iout in self.candidates.keys():
-            temp1 = [f"{ikey}({self.scores[iout][ikey]:.3f}={self.score0s[iout][ikey]:.2f}+{self.score1s[iout][ikey]:.2f}+{self.score2s[iout][ikey]:.2f}+{self.score3s[iout][ikey]:.2f})" for ikey in self.candidates[iout].keys()]
-            temp += f"[{iout}]\t{temp1}\n"
-        tcands = "".join(temp)
+        
+        if len(self.candidates.keys())>0:
+            temp = []
+            outkeys = list(self.candidates.keys())
+            outkeys = np.sort(outkeys)[::-1] if self.prog else np.sort(outkeys)
+            for iout in outkeys:
+                temp1 = [f"{ikey}({self.scores[iout][ikey]:.3f}={self.score0s[iout][ikey]:.2f}+{self.score1s[iout][ikey]:.2f}+{self.score2s[iout][ikey]:.2f}+{self.score3s[iout][ikey]:.2f})" for ikey in self.candidates[iout].keys()]
+                temp += f"[{iout}]\t{temp1}\n"
+            tcands = "".join(temp)
+        else:
+            tcands = ""
 
         text = f"\n[Branch summary report]\n>>> Root:\n\t{troot}\n>>> Current root:\n\t{tcurrent}\n>>> Current branch:\n\t[{tbranch}]\n>>> Candidates:\n{tcands}\n>>> Current Memory: {psutil.Process().memory_info().rss / 2 ** 30:.4f} GB\n>>> Elapsed time: {self.secrecord:.4f} sec\n"
         if isprint:
@@ -216,6 +234,7 @@ class Branch():
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
 
+        self.data.debugger.info(f"{prefix}\n{self.summary(isprint=False)}")
         ref = time.time()
         self.connect(self.rootleaf, prefix=prefix)
         self.go = self.rootleaf.find_candidates(prefix=prefix, **kwargs)
@@ -226,6 +245,7 @@ class Branch():
             self.choose_winner(jout, prefix=prefix)
         else:
             self.go = False
+        self.data.debugger.info(f"{prefix}\n{self.summary(isprint=False)}")
         if not self.go:
             keys = list(self.candidates.keys())
             for key in keys:
@@ -330,10 +350,23 @@ class Branch():
                     return list(self.candidates[iout].keys())
                 else:
                     return []
-            self.data.debugger.debug(f"[NUMBA TEST][update_cands] -> [atleast_numba_para(a,b)]:")
-            self.data.debugger.debug(f"            type(a)={type(gmpids)}, type(a[0])={type(gmpids[0])}")
-            self.data.debugger.debug(f"            type(b)={type(checkids)}, type(b[0])={type(checkids[0])}")
-            inds = atleast_numba_para(gmpids, checkids)
+            if len(gmpids) < 95:
+                self.data.debugger.debug(f"[NUMBA TEST][update_cands] -> [atleast_numba_para(a,b)]:")
+                self.data.debugger.debug(f"            type(a)={type(gmpids)}, type(a[0])={type(gmpids[0])}")
+                self.data.debugger.debug(f"            type(b)={type(checkids)}, type(b[0])={type(checkids[0])}")
+                inds = atleast_numba_para(gmpids, checkids)
+            else:
+                nth = len(gmpids)//90 + 1
+                for inth in range(nth):
+                    igmpids = gmpids[inth*90 : (inth+1)*90]
+                    self.data.debugger.debug(f"[NUMBA TEST][update_cands] -> [atleast_numba_para(a,b)]: (split)")
+                    self.data.debugger.debug(f"            type(a)={type(igmpids)}, type(a[0])={type(igmpids[0])}")
+                    self.data.debugger.debug(f"            type(b)={type(checkids)}, type(b[0])={type(checkids[0])}")
+                    iinds = atleast_numba_para(igmpids, checkids)
+                    if inth == 0:
+                        inds = iinds
+                    else:
+                        inds = np.hstack((inds, iinds))
             for gal, _, ind in zip(gals, gmpids, inds):
                 if ind:
                     self.gal2leaf(gal, prefix=prefix)

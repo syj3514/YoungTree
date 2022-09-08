@@ -11,9 +11,9 @@ from tree_root import Treebase
 import params
 
 
-
-fname = input("`./log/{  }_ini.log.params` file: ") #########################
-fname = f"./log/{fname}_ini.log.params"
+mode = input("Mode: (hagn, nh, y39990, ...)")
+fname = input(f"`./log/[ fname ]_{mode}_ini.log.params` file: ") #########################
+fname = f"./log/{fname}_{mode}_ini.log.params"
 p = pklload(fname) #########################
 p.logprefix = f"re_{p.logprefix}"
 #########################################################

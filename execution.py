@@ -5,12 +5,14 @@ import numpy as np
 from rur import uri, uhmi
 import warnings
 import logging
-
 from tree_utool import *
 from tree_root import Treebase
 import params
 
 
+#########################################################
+#   From params.py, record to dictionary
+#########################################################
 p = {}
 for key in params.__dict__.keys():
     if not "_" in key:
@@ -19,9 +21,8 @@ for key in params.__dict__.keys():
 p = DotDict(p)
 
 #########################################################
-###############         Targets                ##########
+#   Load nout
 #########################################################
-# p.mode = input("\n>>> p.mode=? (hagn, yxxxxx, nh..)")
 modenames = {"hagn": "Horizon-AGN", 
             "y01605": "YZiCS-01605",
             "y04466": "YZiCS-04466",
@@ -41,42 +42,41 @@ modenames = {"hagn": "Horizon-AGN",
             "y49096": "YZiCS-49096",
             "nh": "NewHorizon"}
 
-
-
+# Mode configuration
 if not p.mode in modenames.keys():
     raise ValueError(f"mode={p.mode} is not supported!")
 modename = modenames[p.mode]
 repo, rurmode = mode2repo(p.mode)
 
-# ans = input("\n>>> Use galaxy? ")
+# For message printing
 galstr = "Halo"
 galstrs = "Halos"
 if p.galaxy:
     galstr = "Galaxy"
     galstrs = "Galaxies"
-
-nout = load_nout(p.mode, galaxy=p.galaxy)
-
-# print(f"{prefix} {nout[-1]} ~ {nout[0]}")
-if p.iout == -1:
-    p.iout = nout[0]
-
 progstr = "Descendant"
 if p.prog:
     progstr = "Progenitor"
+
+# Read output list
+nout = load_nout(p.mode, galaxy=p.galaxy)
+if p.iout == -1:
+    p.iout = nout[0]
+if not p.iout in nout:
+    raise ValueError(f"iout={p.iout} is not in nout!")
+
 message = f"< YoungTree >\nfinding {progstr}s\nUsing {modename} {galstr}\n{len(nout)} outputs are found! ({nout[-1]}~{nout[0]})\n"
+
 #########################################################
-###############         Debugger                #########
+#   Make debugger for log
 #########################################################
 debugger = None
+# Initialize
 fname = make_logname(p.mode, -1, logprefix=p.logprefix)
-
 debugger = custom_debugger(fname, detail=p.detail)
 debugger.info(message)
 print(message)
 
-if not p.iout in nout:
-    raise ValueError(f"iout={p.iout} is not in nout!")
 
 uri.timer.verbose = 0
 snap_now = uri.RamsesSnapshot(repo, p.iout, path_in_repo='snapshots', mode=rurmode )

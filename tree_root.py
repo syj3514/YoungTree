@@ -80,13 +80,6 @@ class Treebase():
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
 
-        # frominit = {
-        #     "simmode":self.simmode, "galaxy":self.galaxy, "flush_GB":self.flush_GB, "verbose":self.verbose, "loadall":self.loadall,
-        #     "prog":self.prog, "detail":self.detail, "logprefix":self.logprefix
-        #     }
-        # fromqueue = {
-        #     "initial_out":self.initial_out, "initial_galids":self.initial_galids, "treeleng":self.treeleng, "interplay":self.interplay
-        #     }
         status = {
             "snapkeys":list(self.dict_snap.keys()), 
             "partkeys":list((iout, galid) for iout in self.dict_part.keys() for galid in self.dict_part[iout].keys()),
@@ -94,7 +87,6 @@ class Treebase():
             "branches_queue":list(ib for ib in self.branches_queue.keys())
         }
         clock.done()
-        # return frominit, fromqueue, status
         return status
     
     def import_backup(self, status, prefix=""): # may not used
@@ -155,8 +147,10 @@ class Treebase():
 
         gals = self.load_gal(iout, galid=galids, prefix=prefix)
 
+        keys = list(self.branches_queue.keys())
         for gal in gals:
-            self.branches_queue[gal['id']]=Branch(gal, self, galaxy=self.galaxy, mode=self.simmode, verbose=self.verbose, prefix=prefix, debugger=self.debugger, interplay=self.interplay, prog=self.prog)
+            if not gal['id'] in keys:
+                self.branches_queue[gal['id']]=Branch(gal, self, galaxy=self.galaxy, mode=self.simmode, verbose=self.verbose, prefix=prefix, debugger=self.debugger, interplay=self.interplay, prog=self.prog)
 
         clock.done()
 
@@ -164,60 +158,81 @@ class Treebase():
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
 
+        ### Write queue information to attributes
         self.initial_out = iout
         self.initial_galids = gals['id']
         self.treeleng = treeleng
         self.interplay = interplay
         self.nout = self.nout[self.nout<=iout] if self.prog else self.nout[self.nout>=iout]
 
+        ### Make branch objects
         self.make_branches(iout, gals['id'], prefix=prefix)
         self.debugger.info(f"{prefix}\n{self.summary()}")
+
+        ### Main run
         try:
+            ### Current status
             go=True
             ntree = 1
+
+            ### Find progenitor or descendant
             if self.prog:
                 outs = self.nout
             else:
                 outs = self.nout[::-1]
             
             
+            ### Load backup data and synchronize
             if backup_dict is not None:
+                ## Read current status
+                prefix_import = f"{prefix} <Import>"
                 jout = backup_dict["Queue"]['jout']
                 if self.prog:
                     outs = outs[outs < jout]
                 else:
                     outs = outs[outs > jout]
-                self.debugger.info(f"{prefix} Load from {jout} BACKUP")
+                self.debugger.info(f"{prefix_import} Load from {jout} BACKUP")
                 ntree = backup_dict["Queue"]['ntree']
                 go = backup_dict["Queue"]['go']
 
-                self.debugger.info(f"{prefix} Branch restoration...")
-                branchkeys = np.array(backup_dict["Branch"].keys())
+                ## Read saved branch keys
+                self.debugger.info(f"{prefix_import} Branch restoration...")
+                branchkeys = np.asarray(list(backup_dict["Branch"].keys()))
                 keys = list(self.branches_queue.keys())
                 for key in keys:
-                    if not key in branchkeys:
+                    if not key in branchkeys[:,1]:
                         self.branches_queue[key] = None
                         del self.branches_queue[key]
                     else:
                         self.branches_queue[key].import_backup(backup_dict["Branch"][(iout, key)])
-                self.debugger.info(f"{prefix} Leaf restoration...")
+
+                ## Read saved leaf keys
+                self.debugger.info(f"{prefix_import} Leaf restoration...")
                 for iiout in backup_dict["Leaf"].keys():
                     for name in backup_dict["Leaf"][iiout]:
                         lout, lid = name
-                        status_leaf = backup_dict["Leaf"][iiout][lid]
-                        branch = self.branches_queue[status_leaf["branch"][1]]
+                        status_leaf = backup_dict["Leaf"][iiout][name]
+                        branch = None
                         leaf = self.load_leaf(lout, lid, branch)
                         leaf.import_backup(status_leaf)
+                
+                ## Discard useless data
+                self.flush_auto(prefix=prefix_import)
 
-
-
+            ### Main loop
             for jout in outs:
+                ## Make new log file
+                jref = time.time()
                 backup_dict = {}
                 fname = make_logname(self.simmode, jout, logprefix=self.logprefix)
                 self.debugger.handlers = []
                 self.debugger = custom_debugger(fname, detail=self.detail)
+
+                ## Loop for each branch
                 keys = list( self.branches_queue.keys() )
+                len_branch = len(keys)
                 for key in keys:
+                    # Find candidates & calculate scores
                     go = False
                     iprefix = prefix+f"<{key:05d}> "
                     igo = self.branches_queue[key].do_onestep(jout, prefix=iprefix)
@@ -230,27 +245,28 @@ class Treebase():
                     gc.collect()
                 self.flush_auto(prefix=prefix)
                 self.debugger.info(f"{prefix}\n{self.summary()}")
+                
+                ## Status update
                 ntree += 1
                 if treeleng is not None:
                     if ntree >= treeleng:
                         go=False
                 if not go:
                     break
-                # frominit, fromqueue, status = self.export_backup()
                 status = self.export_backup()
-                # backup_dict["Root_initial"]=frominit
-                # backup_dict["Root_queue"]=fromqueue
-                # backup_dict["Root_status"]=status
+
+                ## Save bakup data
+                # Record current status
                 backup_dict["Queue"] = {"ntree":ntree, "go":go, "jout":jout}
                 backup_dict["Root"] = status
-                
+                # Record branch keys
                 backup_dict["Branch"] = {}
                 keys = list( self.branches_queue.keys() )
                 for key in keys:
                     branch = self.branches_queue[key]
                     name, status_ib = branch.export_backup()
                     backup_dict["Branch"][name] = status_ib
-                
+                # Record leaf keys
                 backup_dict["Leaf"] = {}
                 iouts = list( self.dict_leaves.keys() )
                 for iiout in iouts:
@@ -260,15 +276,9 @@ class Treebase():
                         leaf = self.dict_leaves[iiout][galid]
                         name, status_leaf = leaf.export_backup()
                         backup_dict["Leaf"][iiout][name] = status_leaf
-                pklsave(backup_dict, f"{fname}.pickle")
-
-
-                # for key in keys:
-                #     branch = self.branches_queue[key]
-                #     name, status_ib = branch.export_backup()
-                #     backup_dict["Branch"][name] = status_ib
-                
-
+                # Save backup file
+                pklsave(backup_dict, f"{fname}.pickle")             
+                self.debugger.info(f"\n Elapsed time for jout={jout} ({len_branch} branches)\n---> {(time.time()-jref)/60:.4f} min")
 
         except Exception as e:
             print(traceback.format_exc())
@@ -456,22 +466,23 @@ class Treebase():
             # clock2 = timer(text=prefix+"[GalaxyMaker load]", verbose=self.verbose, debugger=self.debugger)
             if gal is None:
                 gal = self.load_gal(iout, galid, prefix=prefix)
-            self.dict_leaves[iout][galid] = Leaf(gal, branch, self, verbose=self.verbose-1, prefix=prefix, debugger=self.debugger, interplay=branch.interplay, prog=self.prog)
+            self.dict_leaves[iout][galid] = Leaf(gal, branch, self, verbose=self.verbose-1, prefix=prefix, debugger=self.debugger, interplay=self.interplay, prog=self.prog)
         
         if self.dict_leaves[iout][galid].pruned:
             if gal is None:
                 gal = self.load_gal(iout, galid, prefix=prefix)
-            self.dict_leaves[iout][galid] = Leaf(gal, branch, self, verbose=self.verbose-1, prefix=prefix, debugger=self.debugger, interplay=branch.interplay, prog=self.prog)
+            self.dict_leaves[iout][galid] = Leaf(gal, branch, self, verbose=self.verbose-1, prefix=prefix, debugger=self.debugger, interplay=self.interplay, prog=self.prog)
 
-        if not branch.rootid in self.dict_leaves[iout][galid].parents:
-            self.dict_leaves[iout][galid].parents += [branch.rootid]
+        if branch is not None:
+            if not branch.rootid in self.dict_leaves[iout][galid].parents:
+                self.dict_leaves[iout][galid].parents += [branch.rootid]
         
-        if self.dict_leaves[iout][galid].branch != branch:
-            if not self.dict_leaves[iout][galid].branch in self.dict_leaves[iout][galid].otherbranch:
-                self.dict_leaves[iout][galid].otherbranch += [self.dict_leaves[iout][galid].branch]
-            self.dict_leaves[iout][galid].branch = branch
-        self.dict_leaves[iout][galid].clear_ready=False
-        branch.connect(self.dict_leaves[iout][galid])
+            if self.dict_leaves[iout][galid].branch != branch:
+                if not self.dict_leaves[iout][galid].branch in self.dict_leaves[iout][galid].otherbranch:
+                    self.dict_leaves[iout][galid].otherbranch += [self.dict_leaves[iout][galid].branch]
+                self.dict_leaves[iout][galid].branch = branch
+            self.dict_leaves[iout][galid].clear_ready=False
+            branch.connect(self.dict_leaves[iout][galid])
         return self.dict_leaves[iout][galid]
 
 
