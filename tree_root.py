@@ -22,9 +22,9 @@ class Treebase():
     __slots__ = ['iniGB', 'iniMB', 'flush_GB', 'simmode', 'galaxy', 'logprefix', 'detail',
                 'partstr', 'Partstr', 'galstr', 'Galstr','verbose', 'debugger',
                 'rurmode', 'repo', 'initial_out', 'initial_galids', 'treeleng', 'interplay',
-                'loadall','nout','nstep',
+                'loadall','nout','nstep','dp',
                 'dict_snap','dict_part','dict_gals','dict_leaves', 'branches_queue', 'prog']
-    def __init__(self, simmode='hagn', galaxy=True, flush_GB=50, verbose=2, debugger=None, loadall=False, prefix="", prog=True, logprefix="output_", detail=True):
+    def __init__(self, simmode='hagn', galaxy=True, flush_GB=50, verbose=2, debugger=None, loadall=False, prefix="", prog=True, logprefix="output_", detail=True, dp=False):
         func = f"[__Treebase__]"; prefix = f"{prefix}{func}"
         clock = timer(text=prefix, verbose=verbose, debugger=debugger)
 
@@ -35,6 +35,7 @@ class Treebase():
         self.galaxy = galaxy
         self.logprefix=logprefix
         self.detail=detail
+        self.dp=dp
 
         if self.galaxy:
             self.partstr = "star"
@@ -49,15 +50,16 @@ class Treebase():
         self.verbose = verbose
         self.debugger = debugger
 
-        if simmode[0] == 'h':
-            self.rurmode = 'hagn'
-            self.repo = f"/storage4/Horizon_AGN"
-        elif simmode[0] == 'y':
-            self.rurmode = 'yzics'
-            self.repo = f"/storage3/Clusters/{simmode[1:]}"
-        elif simmode == 'nh':
-            self.rurmode = 'nh'
-            self.repo = "/storage6/NewHorizon"
+        self.repo, self.rurmode, _ = mode2repo(simmode)
+        # if simmode[0] == 'h':
+        #     self.rurmode = 'hagn'
+        #     self.repo = f"/storage4/Horizon_AGN"
+        # elif simmode[0] == 'y':
+        #     self.rurmode = 'yzics'
+        #     self.repo = f"/storage3/Clusters/{simmode[1:]}"
+        # elif simmode == 'nh':
+        #     self.rurmode = 'nh'
+        #     self.repo = "/storage6/NewHorizon"
 
         self.loadall = loadall
         self.initial_galids = np.array([])
@@ -77,8 +79,8 @@ class Treebase():
         clock.done()
 
     def export_backup(self, prefix=""):
-        func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
-        clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
+        # func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func} <Root>"
+        # clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
 
         status = {
             "snapkeys":list(self.dict_snap.keys()), 
@@ -86,26 +88,27 @@ class Treebase():
             "galskeys":list(iout for iout in self.dict_gals['galaxymakers'].keys()),
             "branches_queue":list(ib for ib in self.branches_queue.keys())
         }
-        clock.done()
+        # clock.done()
         return status
     
     def import_backup(self, status, prefix=""): # may not used
-        func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
+        func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func} <Root>"
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
 
         for key in status["snapkeys"]:
-            self.load_snap(key)
+            self.load_snap(key, prefix=prefix)
         
         for iout, galid in status["partkeys"]:
-            self.load_part(iout, galid, galaxy=self.galaxy)
+            self.load_part(iout, galid, galaxy=self.galaxy, prefix=prefix)
         
         for iout in status["galskeys"]:
-            self.load_gal(iout, galid='all')
+            self.load_gal(iout, galid='all', prefix=prefix)
         
         galids = np.array([ib for ib in status['branches_queue']])
-        self.make_branches(self.initial_out, galids=galids)
+        self.make_branches(self.initial_out, galids=galids, prefix=prefix)
 
         clock.done()
+        dprint_("\n", debugger=self.debugger)
 
 
 
@@ -253,20 +256,25 @@ class Treebase():
                         go=False
                 if not go:
                     break
-                status = self.export_backup()
 
+                clock_backup = timer(text="[export_backup] <Root>", verbose=self.verbose, debugger=self.debugger)
+                status = self.export_backup()
                 ## Save bakup data
                 # Record current status
                 backup_dict["Queue"] = {"ntree":ntree, "go":go, "jout":jout}
                 backup_dict["Root"] = status
+                clock_backup.done()
                 # Record branch keys
+                clock_backup = timer(text="[export_backup] <Branch>", verbose=self.verbose, debugger=self.debugger)
                 backup_dict["Branch"] = {}
                 keys = list( self.branches_queue.keys() )
                 for key in keys:
                     branch = self.branches_queue[key]
                     name, status_ib = branch.export_backup()
                     backup_dict["Branch"][name] = status_ib
+                clock_backup.done()
                 # Record leaf keys
+                clock_backup = timer(text="[export_backup] <Leaf>", verbose=self.verbose, debugger=self.debugger)
                 backup_dict["Leaf"] = {}
                 iouts = list( self.dict_leaves.keys() )
                 for iiout in iouts:
@@ -276,6 +284,7 @@ class Treebase():
                         leaf = self.dict_leaves[iiout][galid]
                         name, status_leaf = leaf.export_backup()
                         backup_dict["Leaf"][iiout][name] = status_leaf
+                clock_backup.done()
                 # Save backup file
                 pklsave(backup_dict, f"{fname}.pickle")             
                 self.debugger.info(f"\n Elapsed time for jout={jout} ({len_branch} branches)\n---> {(time.time()-jref)/60:.4f} min")
@@ -398,7 +407,7 @@ class Treebase():
         return self.dict_snap[iout]
 
     def load_gal(self, iout, galid, return_part=False, prefix=""):
-        # func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
+        func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
         # clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
         if psutil.Process().memory_info().rss / 2 ** 30 > self.flush_GB+self.iniGB:
             self.flush_auto(prefix=prefix)
@@ -406,7 +415,7 @@ class Treebase():
         if not iout in self.dict_gals["galaxymakers"].keys():
             func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
             snap = self.load_snap(iout, prefix=prefix)
-            gm, temp = uhmi.HaloMaker.load(snap, galaxy=self.galaxy, load_parts=True) #<-- Bottleneck!
+            gm, temp = uhmi.HaloMaker.load(snap, galaxy=self.galaxy, load_parts=True, double_precision=self.dp) #<-- Bottleneck!
             gmpid = np.array(temp)
             self.dict_gals["galaxymakers"][iout] = gm
             cumparts = np.insert(np.cumsum(gm["nparts"]), 0, 0)
@@ -416,26 +425,21 @@ class Treebase():
             del gm; del gmpid; del cumparts; del temp
             gc.collect()
             if self.loadall:
-                self.debugger.info(f"{prefix} *** loadall=True: loadall {self.partstr}s: get_part...")
+                clock2 = timer(text=prefix+f"loadall ({iout}): <get_part>", verbose=self.verbose, debugger=self.debugger)
+                clock2.done()
                 snap.box = np.array([[0, 1], [0, 1], [0, 1]])
-                snap.get_part(onlystar=self.galaxy)
-                self.debugger.info(f"{prefix} *** loadall=True: loadall {self.partstr}s: get_part Done")
-                
-                # self.debugger.info(f"{prefix} *** loadall=True: loadall {self.partstr}s: Abs ...")    
+                snap.get_part(onlystar=self.galaxy, target_fields=['id', 'x', 'y', 'z', 'vx', 'vy', 'vz', 'm'])
                 snap.part_data['id'] = np.abs(snap.part_data['id'])
-                # self.debugger.info(f"{prefix} *** loadall=True: loadall {self.partstr}s: Abs Done")    
-                self.debugger.info(f"{prefix} *** loadall=True: loadall {self.partstr}s: sorting...")    
+                clock2 = timer(text=prefix+f"loadall ({iout}): <argsort>", verbose=self.verbose, debugger=self.debugger)
                 arg = np.argsort(snap.part_data['id'])
                 snap.part_data = snap.part_data[arg]
                 snap.part.table = snap.part_data
                 self.dict_snap[iout] = snap
-                self.debugger.info(f"{prefix} *** loadall=True: loadall {self.partstr}s: sorting Done")
-                
-                self.debugger.info(f"{prefix} *** loadall=True: loadall {self.partstr}s: load_part to dictionary...")
+                clock2.done()
+                clock2 = timer(text=prefix+f"loadall ({iout}): <part2dict>", verbose=self.verbose, debugger=self.debugger)
                 for gal in self.dict_gals["galaxymakers"][iout]:
                     self.load_part(iout, gal['id'], prefix=prefix, silent=False, galaxy=self.galaxy)
-                self.debugger.info(f"{prefix} *** loadall=True: loadall {self.partstr}s load_part to dictionary Done")
-            # clock2.done()
+                clock2.done()
 
         # clock.done()
         if isinstance(galid,str):
@@ -482,11 +486,13 @@ class Treebase():
                     self.dict_leaves[iout][galid].otherbranch += [self.dict_leaves[iout][galid].branch]
                 self.dict_leaves[iout][galid].branch = branch
             self.dict_leaves[iout][galid].clear_ready=False
-            branch.connect(self.dict_leaves[iout][galid])
+            branch.connect(self.dict_leaves[iout][galid], prefix=prefix)
         return self.dict_leaves[iout][galid]
 
 
     def load_part(self, iout, galid, prefix="", silent=False, galaxy=True):
+        # BUG: For NH2, galaxymaker overfind member particles. So I should some cut radius for finding member stars
+        # In this case, we may want to check other dependent functions for example match rate score.
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
         # clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
         if psutil.Process().memory_info().rss / 2 ** 30 > self.flush_GB+self.iniGB:
@@ -518,7 +524,7 @@ class Treebase():
                     snap.set_box_halo(gal, 1.1*scale, use_halo_radius=True, radius_name='r')
                     # if not silent:
                         # clock2 = timer(text=prefix+"[get_part]1", verbose=self.verbose, debugger=self.debugger)
-                    snap.get_part(onlystar=self.galaxy)
+                    snap.get_part(onlystar=self.galaxy, target_fields=['id', 'x', 'y', 'z', 'vx', 'vy', 'vz', 'm'])
                     # if not silent:
                         # clock2.done();clock2 = timer(text=prefix+"[get_part]2", verbose=self.verbose, debugger=self.debugger)
                     try:
@@ -538,7 +544,8 @@ class Treebase():
                         leng = 0
                     self.debugger.debug(f"[get_part] {scale}")
                     scale *= 2
-                    if scale > 130:
+                    if scale > 4:
+                        self.debugger.info(prefix+f"scale exceeds 4xRadius! Cut-off nparts! {len(gpid)}->{leng}")
                         break
                 part = snap.Particle(part, snap)
                 # clock2.done();clock2 = timer(text=prefix+"[get_part]5", verbose=self.verbose, debugger=self.debugger)

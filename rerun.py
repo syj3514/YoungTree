@@ -8,12 +8,15 @@ import logging
 
 from tree_utool import *
 from tree_root import Treebase
-import params
+import importlib
+
+module = input("params? (____.py)")
+params = importlib.import_module(module)
 
 
 mode = input("Mode: (hagn, nh, y39990, ...)")
 fname = input(f"`./log/[ fname ]_{mode}_ini.log.params` file: ") #########################
-fname = f"./log/{fname}_{mode}_ini.log.params"
+fname = f"./log/{mode}/{fname}_{mode}_ini.log.params"
 p = pklload(fname) #########################
 p.logprefix = f"re_{p.logprefix}"
 #########################################################
@@ -37,14 +40,21 @@ modenames = {"hagn": "Horizon-AGN",
             "y36415": "YZiCS-36415",
             "y39990": "YZiCS-39990",
             "y49096": "YZiCS-49096",
-            "nh": "NewHorizon"}
+            "nh": "NewHorizon",
+            "nh2": "NewHorizon2",
+            "nc": "NewCluster",
+            "fornax": "FORNAX"
+            }
 
 
 
 if not p.mode in modenames.keys():
     raise ValueError(f"mode={p.mode} is not supported!")
 modename = modenames[p.mode]
-repo, rurmode = mode2repo(p.mode)
+repo, rurmode, dp = mode2repo(p.mode)
+if dp:
+    if not p.galaxy:
+        dp = False
 
 # ans = input("\n>>> Use galaxy? ")
 galstr = "Halo"
@@ -52,34 +62,32 @@ galstrs = "Halos"
 if p.galaxy:
     galstr = "Galaxy"
     galstrs = "Galaxies"
-
-nout = load_nout(p.mode, galaxy=p.galaxy)
-
-# print(f"{prefix} {nout[-1]} ~ {nout[0]}")
-if p.iout == -1:
-    p.iout = nout[0]
-
 progstr = "Descendant"
 if p.prog:
     progstr = "Progenitor"
+
+nout = load_nout(p.mode, galaxy=p.galaxy)
+if p.iout == -1:
+    p.iout = nout[0]
+if not p.iout in nout:
+    raise ValueError(f"iout={p.iout} is not in nout!")
+
 message = f"< YoungTree >\n[Re-Run] finding {progstr}s\n[Re-Run] Using {modename} {galstr}\n[Re-Run] {len(nout)} outputs are found! ({nout[-1]}~{nout[0]})\n"
 #########################################################
 ###############         Debugger                #########
 #########################################################
 debugger = None
 fname = make_logname(p.mode, -1, logprefix=p.logprefix)
-# pklsave(p, f"{fname}.params") #########################
+
 
 debugger = custom_debugger(fname, detail=p.detail)
 debugger.info(message)
 print(message)
 
-if not p.iout in nout:
-    raise ValueError(f"iout={p.iout} is not in nout!")
 
 uri.timer.verbose = 0
 snap_now = uri.RamsesSnapshot(repo, p.iout, path_in_repo='snapshots', mode=rurmode )
-gals_now = uhmi.HaloMaker.load(snap_now, galaxy=True)
+gals_now = uhmi.HaloMaker.load(snap_now, galaxy=p.galaxy, double_precision=dp)
 snap_now.clear()
 
 if p.usegals == 'all':
@@ -128,7 +136,6 @@ else:
         
 
 
-
 #########################################################
 ###############         Tree Making                ######
 #########################################################
@@ -143,7 +150,7 @@ if backupfname[:3] == "re_":
 backup_dict = pklload(f"{backupfname}.pickle")
 
 
-MyTree = Treebase(simmode=p.mode, debugger=debugger, verbose=0, flush_GB=p.flush_GB, loadall=loadall, prog=p.prog, detail=p.detail, logprefix=p.logprefix)
+MyTree = Treebase(simmode=p.mode, debugger=debugger, verbose=0, flush_GB=p.flush_GB, loadall=loadall, prog=p.prog, detail=p.detail, logprefix=p.logprefix, dp=dp)
 print(backup_dict['Root']["snapkeys"])
 MyTree.import_backup(backup_dict["Root"])
 

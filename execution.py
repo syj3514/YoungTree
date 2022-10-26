@@ -7,7 +7,11 @@ import warnings
 import logging
 from tree_utool import *
 from tree_root import Treebase
-import params
+import importlib
+
+module = input("params? (____.py)")
+params = importlib.import_module(module)
+
 
 
 #########################################################
@@ -40,14 +44,20 @@ modenames = {"hagn": "Horizon-AGN",
             "y36415": "YZiCS-36415",
             "y39990": "YZiCS-39990",
             "y49096": "YZiCS-49096",
-            "nh": "NewHorizon"}
+            "nh": "NewHorizon",
+            "nh2": "NewHorizon2",
+            "nc": "NewCluster",
+            "fornax": "FORNAX"
+            }
 
 # Mode configuration
 if not p.mode in modenames.keys():
     raise ValueError(f"mode={p.mode} is not supported!")
 modename = modenames[p.mode]
-repo, rurmode = mode2repo(p.mode)
-
+repo, rurmode, dp = mode2repo(p.mode)
+if dp:
+    if not p.galaxy:
+        dp = False
 # For message printing
 galstr = "Halo"
 galstrs = "Halos"
@@ -80,7 +90,7 @@ print(message)
 
 uri.timer.verbose = 0
 snap_now = uri.RamsesSnapshot(repo, p.iout, path_in_repo='snapshots', mode=rurmode )
-gals_now = uhmi.HaloMaker.load(snap_now, galaxy=True)
+gals_now = uhmi.HaloMaker.load(snap_now, galaxy=p.galaxy, double_precision=dp)
 snap_now.clear()
 
 if p.usegals == 'all':
@@ -135,7 +145,7 @@ pklsave(p, f"{fname}.params", overwrite=True)
 debugger.info(f"\nAllow {p.flush_GB:.2f} GB Memory")
 print(f"Allow {p.flush_GB:.2f} GB Memory")
 
-MyTree = Treebase(simmode=p.mode, debugger=debugger, verbose=0, flush_GB=p.flush_GB, loadall=loadall, prog=p.prog, detail=p.detail, logprefix=p.logprefix)
+MyTree = Treebase(simmode=p.mode, debugger=debugger, verbose=0, flush_GB=p.flush_GB, loadall=loadall, prog=p.prog, detail=p.detail, logprefix=p.logprefix, dp=dp)
 
 
 destination = np.min(nout) if p.prog else np.max(nout)

@@ -63,8 +63,8 @@ class Leaf():
         return (self.iout, self.galid)
     
     def export_backup(self, prefix=""):
-        func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func} <L{self.galid} at {self.iout}>"
-        clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
+        # func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func} <L{self.galid} at {self.iout}>"
+        # clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
 
         name = self.name()
         status = {
@@ -79,7 +79,7 @@ class Leaf():
             "saved_veloffsets":self.saved_veloffsets,
             }
 
-        clock.done()
+        # clock.done()
         return name, status
     
     def import_backup(self, status, prefix=""):
@@ -110,13 +110,11 @@ class Leaf():
     def report(self, prefix=""):
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
 
-        txt = f"{prefix} [L{self.galid} at {self.iout}]\t{self.nparts} particles (pruned? {self.pruned})"
+        txt = f"{prefix}     [L{self.galid} at {self.iout}]\t{self.nparts} particles (pruned? {self.pruned})"
         self.data.debugger.debug(txt)
-        txt = f"{prefix} Current branch: {self.branch.rootid if self.branch is not None else None}"
+        txt = f"{prefix}     Current branch: {self.branch.rootid if self.branch is not None else None} & Other branches: {[ib.rootid if ib is not None else None for ib in self.otherbranch]}"
         self.data.debugger.debug(txt)
-        txt = f"{prefix} Other branches: {[ib.rootid if ib is not None else None for ib in self.otherbranch]}"
-        self.data.debugger.debug(txt)
-        txt = f"{prefix} All parents: {self.parents}"
+        txt = f"{prefix}     >>> All parents: {self.parents}"
         self.data.debugger.debug(txt)
 
 
@@ -162,7 +160,7 @@ class Leaf():
     def importance(self, prefix="", usevel=True):
         # Subject to `__init__`
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
-        clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
+        # clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
         
         cx, cy, cz = self.gal_gm['x'],self.gal_gm['y'],self.gal_gm['z']
         dist = distance3d(cx,cy,cz, self.px, self.py, self.pz) / self.gal_gm['rvir']
@@ -185,7 +183,7 @@ class Leaf():
             #     raise ValueError("velocity wrong!")
         self.pweight = self.pm/dist
 
-        clock.done()
+        # clock.done()
     
 
     def load_nextids(self, igals, njump=0, masscut_percent=1, nnext=5, prefix="", **kwargs): # MAIN BOTTLENECK!!
@@ -218,12 +216,12 @@ class Leaf():
                 ivel = rms(igal['vx'], igal['vy'], igal['vz'])
                 radii = 5*max(igal['r'],1e-4) + 5*dt*ivel*jsnap.unit['km']
                 neighbors = cut_sphere(jgals, igal['x'], igal['y'], igal['z'], radii, both_sphere=True)
-                self.data.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} in radii")
+                # self.data.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} in radii")
                 
                 
                 if len(neighbors)>0: # candidates at jout
                     neighbors = neighbors[(neighbors['m'] >= igal['m']*masscut_percent/100) & (~np.isin(neighbors['id'], nexts))]
-                    self.data.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} after masscut {masscut_percent} percent")
+                    # self.data.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} after masscut {masscut_percent} percent")
                     if (len(neighbors)>0) and ((len(neighbors)>nnext) or (len(igals)>2*nnext)):
                         _, checkpid = self.data.load_gal(iout, igal['id'], return_part=True, prefix=prefix)
 
@@ -247,12 +245,12 @@ class Leaf():
                         ind = rate>0
 
                         neighbors, rate = neighbors[ind], rate[ind]
-                        self.data.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} after crossmatch")
+                        # self.data.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} after crossmatch")
                         if len(neighbors) > 0:
                             if len(neighbors) > nnext:
                                 arg = np.argsort(rate)
                                 neighbors = neighbors[arg][-nnext:]
-                                self.data.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} after score sorting")
+                                # self.data.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} after score sorting")
                             nid = neighbors['id']
                             nexts = np.concatenate((nexts, nid))
                         else:
@@ -272,9 +270,10 @@ class Leaf():
                         ileaf.nextids[jout] = nid
             
         nexts = np.concatenate((nexts, np.array([0,0,0])))
+        nextnids = np.unique( nexts[nexts>0] )
         
-        clock.done()
-        return np.unique( nexts[nexts>0] ), jout
+        clock.done(add=f"({iout}({istep})->{jout}({jstep}) nextns={nextnids})")
+        return nextnids, jout
     
 
     def find_candidates(self, masscut_percent=1, nstep=5, nnext=5, prefix="", **kwargs):
@@ -303,8 +302,8 @@ class Leaf():
                     nextnids = self.nextnids[jout]
                 else:
                     nextnids, jout = self.load_nextids(igals, njump=njump, masscut_percent=masscut_percent, nnext=nnext, prefix=prefix, **kwargs)
-                    self.nextnids[jout] = nextnids
-                self.data.debugger.info(f"*** jout(jstep)={jout}({jstep}), nextns={nextnids}")
+                    
+                # self.data.debugger.info(f"*** jout(jstep)={jout}({jstep}), nextns={nextnids}")
                 if len(nextnids) == 0:
                     self.data.debugger.info("JUMP!!")
                     njump += 1
@@ -316,6 +315,7 @@ class Leaf():
                     else:
                         njump = 0
                         igals = self.data.load_gal(jout, nextnids, return_part=False, prefix=prefix)
+                self.nextnids[jout] = nextnids
 
         clock.done()
         keys = list(self.nextnids.keys())

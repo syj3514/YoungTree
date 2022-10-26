@@ -56,20 +56,22 @@ class timer():
 def make_logname(mode, iout, dirname='./log', logprefix=None, overwrite=False):
     if not os.path.isdir(dirname):
         os.mkdir(dirname)
+    if not os.path.isdir(dirname+f"/{mode}"):
+        os.mkdir(dirname+f"/{mode}")
     if logprefix is None:
         logprefix = f"output_"
 
     if iout<0:
-        fname = f"{dirname}/{logprefix}{mode}_ini.log"
+        fname = f"{dirname}/{mode}/{logprefix}{mode}_ini.log"
     else:
-        fname = f"{dirname}/{logprefix}{mode}_{iout:05d}.log"
+        fname = f"{dirname}/{mode}/{logprefix}{mode}_{iout:05d}.log"
     if os.path.isfile(fname) and (not overwrite):
         num = 1
         while os.path.isfile(fname):
             if iout<0:
-                fname = f"{dirname}/{logprefix}{mode}_ini_{num}.log"
+                fname = f"{dirname}/{mode}/{logprefix}{mode}_ini_{num}.log"
             else:
-                fname = f"{dirname}/{logprefix}{mode}_{iout:05d}_{num}.log"
+                fname = f"{dirname}/{mode}/{logprefix}{mode}_{iout:05d}_{num}.log"
             num += 1
     return fname
 
@@ -102,38 +104,67 @@ def dprint_(msg, debugger):
     debugger.debug(msg)
 
 def mode2repo(mode):
+    dp = True
+    canonlystar = False
     if mode[0] == 'h':
         rurmode = 'hagn'
         repo = f"/storage4/Horizon_AGN"
+        dp = False
     elif mode[0] == 'y':
         rurmode = 'yzics'
         repo = f"/storage3/Clusters/{mode[1:]}"
+        dp = False
     elif mode == 'nh':
         rurmode = 'nh'
         repo = "/storage6/NewHorizon"
+    elif mode == 'nh2':
+        rurmode = 'y4'
+        repo = "/storage7/NH2"
+    elif mode == 'nc':
+        rurmode = 'nc'
+        repo = "/storage7/NewCluster2"
+    elif mode == 'fornax':
+        rurmode = 'fornax'
+        repo = '/storage5/FORNAX/KISTI_OUTPUT/l10006'
     else:
         raise ValueError(f"{mode} is currently not supported!")
-    return repo, rurmode
+    return repo, rurmode, dp
 
-def load_nout(mode='hagn', galaxy=True):
-    repo,_ = mode2repo(mode)
+def load_nout(mode='hagn', galaxy=True, double_check=True, useptree=False):
+    repo,_,_ = mode2repo(mode)
     if galaxy:
         path = f"{repo}/galaxy"
     else:
-        path = f"{repo}/halo"
+        path = f"{repo}/halo/DM"
 
+    # From GalaxyMaker
     fnames = np.array(os.listdir(path))
-    if mode == 'nh':
-        ind = [True if "tree_bricks0" in file else False for file in fnames]
-    else:
-        ind = [True if "tree_bricks" in file else False for file in fnames]
+    ind = [True if "tree_bricks" in file else False for file in fnames]
+    fnames = fnames[ind]
+    lengs = np.array([len(file)-11 for file in fnames])
+    maxleng = np.max(lengs)
+    ind = lengs >= maxleng
     fnames = fnames[ind]
     fnames = -np.sort( -np.array([int(file[11:]) for file in fnames]) )
-    # fout = os.listdir(f"{repo}/snapshots")
-    fout = os.listdir(f"{repo}/ptree")
-    # ind = [True if f"output_{fnum:05d}" in fout else False for fnum in fnames]
-    ind = [True if f"ptree_{fnum:05d}.pkl" in fout else False for fnum in fnames]
-    return fnames[ind]
+
+    if double_check:
+        # From output
+        f2 = np.array(os.listdir(repo+"/snapshots"))
+        ind = [True if ("output_" in file)&(len(file)<13) else False for file in f2]
+        f2 = f2[ind]
+        f2 = np.array([int(file[-5:]) for file in f2])
+        ind = np.isin(fnames, f2)
+        fnames = fnames[ind]
+
+        if (os.path.isdir(f"{repo}/ptree")) & (useptree):
+            # From ptree
+            fout = os.listdir(f"{repo}/ptree")
+            ind = [True if f"ptree_{fnum:05d}.pkl" in fout else False for fnum in fnames]
+            return fnames[ind]
+        else:
+            return fnames
+    else:
+        return fnames
 
 def load_nstep(mode='hagn', galaxy=True, nout=None):
     if nout is None:
@@ -357,3 +388,70 @@ def atleast_isin(a, b):
     Return True if any element of a is in b
     '''
     return not set(a).isdisjoint(b)
+
+from scipy.io import FortranFile
+def read_galaxymaker(repo, brick,boxsize_physical, ids=None, dp=False):
+    int_ = np.int32
+    real_ = np.float32
+    if dp:
+        real_ = np.float64
+    full_path = repo+brick
+
+    dtype = [("nparts", int_), ("id", int_), ("timestep", int_), ("m", real_), ("x", real_), ("y", real_), ("z", real_), ("vx", real_), ("vy", real_), ("vz", real_), ("r", real_), ("rvir", real_), ("mvir", real_), ("member", object)]
+
+    with FortranFile(full_path, mode='r') as f:
+        skipread_i(f, 5, dtype=int_)
+        nhalos, nsubs = f.read_ints(int_)
+        nhalos = nhalos + nsubs
+        if ids is None:
+            ids = np.arange(nhalos)+1
+
+        count = 0
+        for i in range(nhalos):
+            nparts, =  f.read_ints(int_) #
+            gmpids = f.read_ints(int_) #
+            galid, = f.read_ints(int_) #
+            if galid in ids:
+                timestep, = f.read_ints(int_) #
+                skipread_i(f, 1, dtype=int_)
+                m, = f.read_reals(real_) #
+                x,y,z = f.read_reals(real_) #
+                vx,vy,vz = f.read_reals(real_) #
+                skipread_f(f, 1, dtype=real_)
+                r,_,_,_ = f.read_reals(real_) #
+                skipread_f(f, 3, dtype=real_)
+                rvir, mvir, _, _ = f.read_reals(real_)
+                skipread_f(f, 1, dtype=real_)
+                skipread_i(f, 1, dtype=int_)
+                skipread_f(f, 2, dtype=real_)
+
+                arr = np.array((nparts, galid, timestep, m, x, y, z, vx, vy, vz, r, rvir, mvir, gmpids), dtype=dtype)
+                if count==0:
+                    data = arr
+                    count += 1
+                else:
+                    data = np.hstack((data, arr))
+            else:
+                skipread_i(f, 2, dtype=int_)
+                skipread_f(f, 10, dtype=real_)
+                skipread_i(f, 1, dtype=int_)
+                skipread_i(f, 2, dtype=int_)
+        
+        mass_unit = 1E11
+        data['m'] *= mass_unit
+        data['mvir'] *= mass_unit
+        data['x'] = data['x'] / boxsize_physical + 0.5
+        data['y'] = data['y'] / boxsize_physical + 0.5
+        data['z'] = data['z'] / boxsize_physical + 0.5
+        data['rvir'] /= boxsize_physical
+        data['r'] /= boxsize_physical
+        return data
+
+
+
+def skipread_i(f, n, dtype=np.int32):
+    for _ in range(n):
+        f.read_ints(dtype)
+def skipread_f(f, n, dtype=np.float64):
+    for _ in range(n):
+        f.read_reals(dtype)

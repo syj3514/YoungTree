@@ -31,17 +31,19 @@ class Branch():
             self.key='star'
         else:
             self.key='dm'
-        if mode[0]=='h':
-            self.repo = f'/storage4/Horizon_AGN/'
-            self.rurmode = "hagn"
-        elif mode[0]=='y':
-            self.repo = f'/storage3/Clusters/{mode[1:]}'
-            self.rurmode = "yzics"
-        elif mode == 'nh':
-            self.repo = f"/storage6/NewHorizon/"
-            self.rurmode = 'nh'
-        else:
-            raise ValueError(f"{mode} is not supported!")
+
+        self.repo, self.rurmode, _ = mode2repo(mode)
+        # if mode[0]=='h':
+        #     self.repo = f'/storage4/Horizon_AGN/'
+        #     self.rurmode = "hagn"
+        # elif mode[0]=='y':
+        #     self.repo = f'/storage3/Clusters/{mode[1:]}'
+        #     self.rurmode = "yzics"
+        # elif mode == 'nh':
+        #     self.repo = f"/storage6/NewHorizon/"
+        #     self.rurmode = 'nh'
+        # else:
+        #     raise ValueError(f"{mode} is not supported!")
 
         
         self.interplay=interplay
@@ -70,8 +72,8 @@ class Branch():
         return (self.rootout, self.rootid)
 
     def export_backup(self, prefix=""):
-        func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func} <B{self.rootid} at {self.rootout}>"
-        clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
+        # func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func} <B{self.rootid} at {self.rootout}>"
+        # clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
         # What only I have
         #   Unchanged
         #       rootid, rootout, rootstep, inipid, inipwei, rootleaf
@@ -96,7 +98,7 @@ class Branch():
             "go":self.go
             }
         
-        clock.done()
+        # clock.done()
         return name, status
     
     def import_backup(self, status, prefix=""):
@@ -104,6 +106,7 @@ class Branch():
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
 
         self.rootleaf = self.data.load_leaf(*status["rootleaf"], self, prefix=prefix)
+        dprint_(np.array(status["candidates"]), debugger=self.data.debugger)
         cands = np.array(status["candidates"])
         iouts = np.unique(cands[:,0])
         for iout in iouts:
@@ -208,7 +211,7 @@ class Branch():
         else:
             tcands = ""
 
-        text = f"\n[Branch summary report]\n>>> Root:\n\t{troot}\n>>> Current root:\n\t{tcurrent}\n>>> Current branch:\n\t[{tbranch}]\n>>> Candidates:\n{tcands}\n>>> Current Memory: {psutil.Process().memory_info().rss / 2 ** 30:.4f} GB\n>>> Elapsed time: {self.secrecord:.4f} sec\n"
+        text = f"\n[Branch summary report] (keep going? {'Yes' if self.go else 'No'})\n>>> Root:\n\t{troot}\n>>> Current root:\n\t{tcurrent}\n>>> Current branch:\n\t[{tbranch}]\n>>> Candidates:\n{tcands}\n>>> Current Memory: {psutil.Process().memory_info().rss / 2 ** 30:.4f} GB\n>>> Elapsed time: {self.secrecord:.4f} sec\n"
         if isprint:
             print(text)
         return text
@@ -234,7 +237,7 @@ class Branch():
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
 
-        self.data.debugger.info(f"{prefix}\n{self.summary(isprint=False)}")
+        self.data.debugger.info(f"\n{self.summary(isprint=False)}")
         ref = time.time()
         self.connect(self.rootleaf, prefix=prefix)
         self.go = self.rootleaf.find_candidates(prefix=prefix, **kwargs)
@@ -245,7 +248,7 @@ class Branch():
             self.choose_winner(jout, prefix=prefix)
         else:
             self.go = False
-        self.data.debugger.info(f"{prefix}\n{self.summary(isprint=False)}")
+        
         if not self.go:
             keys = list(self.candidates.keys())
             for key in keys:
@@ -254,7 +257,7 @@ class Branch():
         
         self.secrecord += time.time()-ref
         clock.done()
-        self.data.debugger.info(f"{prefix}\n{self.summary(isprint=False)}")
+        self.data.debugger.info(f"\n{self.summary(isprint=False)}\n\n\n")
         # except Warning as e:
         #     print("WARNING!! in do_onestep")
         #     breakpoint()
@@ -351,17 +354,17 @@ class Branch():
                 else:
                     return []
             if len(gmpids) < 95:
-                self.data.debugger.debug(f"[NUMBA TEST][update_cands] -> [atleast_numba_para(a,b)]:")
-                self.data.debugger.debug(f"            type(a)={type(gmpids)}, type(a[0])={type(gmpids[0])}")
-                self.data.debugger.debug(f"            type(b)={type(checkids)}, type(b[0])={type(checkids[0])}")
+                # self.data.debugger.debug(f"[NUMBA TEST][update_cands] -> [atleast_numba_para(a,b)]:")
+                # self.data.debugger.debug(f"            type(a)={type(gmpids)}, type(a[0])={type(gmpids[0])}")
+                # self.data.debugger.debug(f"            type(b)={type(checkids)}, type(b[0])={type(checkids[0])}")
                 inds = atleast_numba_para(gmpids, checkids)
             else:
                 nth = len(gmpids)//90 + 1
                 for inth in range(nth):
                     igmpids = gmpids[inth*90 : (inth+1)*90]
-                    self.data.debugger.debug(f"[NUMBA TEST][update_cands] -> [atleast_numba_para(a,b)]: (split)")
-                    self.data.debugger.debug(f"            type(a)={type(igmpids)}, type(a[0])={type(igmpids[0])}")
-                    self.data.debugger.debug(f"            type(b)={type(checkids)}, type(b[0])={type(checkids[0])}")
+                    # self.data.debugger.debug(f"[NUMBA TEST][update_cands] -> [atleast_numba_para(a,b)]: (split)")
+                    # self.data.debugger.debug(f"            type(a)={type(igmpids)}, type(a[0])={type(igmpids[0])}")
+                    # self.data.debugger.debug(f"            type(b)={type(checkids)}, type(b[0])={type(checkids[0])}")
                     iinds = atleast_numba_para(igmpids, checkids)
                     if inth == 0:
                         inds = iinds
