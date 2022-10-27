@@ -481,11 +481,30 @@ class Branch():
             dprint_(f"** [Choose_winner] winner at {jout} (min_of_cand_out={iout})", self.data.debugger)
 
         if iout != self.rootout: # Skip start iout
+            # Remove weird iout garbage
+            ikeys = list( self.candidates.keys() )
+            for ikey in ikeys:
+                if ikey > jout:
+                    jkeys = list( self.candidates[ikey].keys() )
+                    for jkey in jkeys: # for galid
+                        self.disconnect(self.candidates[ikey][jkey], prefix=prefix)
+                        del self.scores[ikey][jkey]
+                        del self.candidates[ikey][jkey]
+                    del self.candidates[ikey]
+                    del self.scores[ikey]
+            # Re-assign iout
+            if self.prog:
+                iout = np.max(list(self.candidates.keys()))
+                dprint_(f"** [Choose_winner] winner at {jout} (max_of_cand_out={iout})", self.data.debugger)
+            else:
+                iout = np.min(list(self.candidates.keys()))
+                dprint_(f"** [Choose_winner] winner at {jout} (min_of_cand_out={iout})", self.data.debugger)
+            # Main process
             if jout==iout:
                 dprint_(f"** [Choose_winner] **********************************", self.data.debugger)
 
                 # Select winner
-                winid=0; winscore=0
+                winid=0; winscore=-1
                 for iid, iscore in self.scores[iout].items():
                     if iscore > winscore:
                         winid = iid
@@ -495,7 +514,7 @@ class Branch():
                 dprint_(f"** [Choose_winner] root leaf {self.rootleaf.gal_gm['id']} at {self.rootleaf.gal_gm['timestep']}", self.data.debugger)
                 
                 # If normal case, crown the winner at iout as king
-                if winscore > 0:
+                if winscore > -1:
                     self.disconnect(self.rootleaf, prefix='')
                     self.rootleaf = self.candidates[iout][winid]
                     self.leaves[iout] = self.rootleaf.gal_gm

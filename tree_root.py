@@ -444,10 +444,10 @@ class Treebase():
             gc.collect()
             if self.loadall:
                 clock2 = timer(text=prefix+f"loadall ({iout}): <get_part>", verbose=self.verbose, debugger=self.debugger)
-                clock2.done()
                 snap.box = np.array([[0, 1], [0, 1], [0, 1]])
                 snap.get_part(onlystar=self.galaxy, target_fields=['id', 'x', 'y', 'z', 'vx', 'vy', 'vz', 'm'])
                 snap.part_data['id'] = np.abs(snap.part_data['id'])
+                clock2.done()
                 clock2 = timer(text=prefix+f"loadall ({iout}): <argsort>", verbose=self.verbose, debugger=self.debugger)
                 arg = np.argsort(snap.part_data['id'])
                 snap.part_data = snap.part_data[arg]

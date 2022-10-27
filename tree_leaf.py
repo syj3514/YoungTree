@@ -211,7 +211,7 @@ class Leaf():
                     ileaf = self.data.dict_leaves[iout][igal['id']]
                     if jout in ileaf.nextids.keys():
                         nexts = np.concatenate((nexts, ileaf.nextids[jout]))
-                        self.data.debugger.debug(f"{prefix} igal[{igal['id']} at {iout}] already calculated fats at {jout}!")
+                        # self.data.debugger.debug(f"{prefix} igal[{igal['id']} at {iout}] already calculated fats at {jout}!")
                         calc = False
             if calc:
                 # Spawn all neighbor galaxies(at jout) of target galaxy(at iout)
@@ -383,7 +383,7 @@ class Leaf():
             igalkeys = list(otherleaf.saved_matchrates[checkiout].keys())
             if checkid in igalkeys:
                 val = otherleaf.saved_matchrates[checkiout][checkid]
-                self.data.debugger.debug(f"{prefix} [G{checkid} at {checkiout}] is already saved in [L{otherleaf.galid} at {otherleaf.iout}]")
+                # self.data.debugger.debug(f"{prefix} [G{checkid} at {checkiout}] is already saved in [L{otherleaf.galid} at {otherleaf.iout}]")
             else:
                 calc = True
         else:
@@ -446,7 +446,7 @@ class Leaf():
             igalkeys = list(otherleaf.saved_veloffsets[self.iout].keys())
             if self.galid in igalkeys:
                 val = otherleaf.saved_veloffsets[self.iout][self.galid]
-                self.data.debugger.debug(f"{prefix} [L{self.galid} at {self.iout}] is already saved in [L{otherleaf.galid}] at {otherleaf.iout}]")
+                # self.data.debugger.debug(f"{prefix} [L{self.galid} at {self.iout}] is already saved in [L{otherleaf.galid}] at {otherleaf.iout}]")
             else:
                 calc = True
         else:
