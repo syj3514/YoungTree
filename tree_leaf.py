@@ -51,7 +51,7 @@ class Leaf():
         # clock.done()
     
     def __del__(self):
-        self.data.debugger.info(f"[DEL] (L{self.galid} at {self.iout}) is destroyed")
+        self.data.debugger.debug(f"[DEL] (L{self.galid} at {self.iout}) is destroyed")
 
     def __str__(self):
         if self.branch is None:
@@ -205,6 +205,7 @@ class Leaf():
         
         for igal in igals: # tester galaxies at iout
             calc = True
+            # If leaf exists, read nextids
             if iout in self.data.dict_leaves.keys():
                 if igal['id'] in self.data.dict_leaves[iout].keys():
                     ileaf = self.data.dict_leaves[iout][igal['id']]
@@ -213,21 +214,21 @@ class Leaf():
                         self.data.debugger.debug(f"{prefix} igal[{igal['id']} at {iout}] already calculated fats at {jout}!")
                         calc = False
             if calc:
+                # Spawn all neighbor galaxies(at jout) of target galaxy(at iout)
                 ivel = rms(igal['vx'], igal['vy'], igal['vz'])
                 radii = 5*max(igal['r'],1e-4) + 5*dt*ivel*jsnap.unit['km']
                 neighbors = cut_sphere(jgals, igal['x'], igal['y'], igal['z'], radii, both_sphere=True)
-                # self.data.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} in radii")
                 
-                
-                if len(neighbors)>0: # candidates at jout
+                # Find at least 1 galaxy
+                if len(neighbors)>0:
+                    ## (m > 1%) & (not already calced)
                     neighbors = neighbors[(neighbors['m'] >= igal['m']*masscut_percent/100) & (~np.isin(neighbors['id'], nexts))]
-                    # self.data.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} after masscut {masscut_percent} percent")
+                    ## More strict check
                     if (len(neighbors)>0) and ((len(neighbors)>nnext) or (len(igals)>2*nnext)):
+                        ### Match rate
                         _, checkpid = self.data.load_gal(iout, igal['id'], return_part=True, prefix=prefix)
-
                         rate = np.zeros(len(neighbors))
                         gals, gmpids = self.data.load_gal(jout, neighbors['id'], return_part=True, prefix=prefix)
-                        # iout, istep = ioutistep(igal, galaxy=self.galaxy, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep)
                         ith = 0
                         for _, gmpid in zip(gals, gmpids):
                             try:
@@ -243,37 +244,40 @@ class Leaf():
                                 # self.data.debugger.debug(f"            type(b)={type(gmpid)}, type(b[0])={type(gmpid[0])}")
                             ith += 1
                         ind = rate>0
-
                         neighbors, rate = neighbors[ind], rate[ind]
-                        # self.data.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} after crossmatch")
+                        
+                        ### If too many, cut top 5
                         if len(neighbors) > 0:
                             if len(neighbors) > nnext:
                                 arg = np.argsort(rate)
                                 neighbors = neighbors[arg][-nnext:]
-                                # self.data.debugger.debug(f"igal[{igal['id']}] len={len(neighbors)} after score sorting")
                             nid = neighbors['id']
                             nexts = np.concatenate((nexts, nid))
                         else:
                             nid = np.array([0])
-
+                    ## Regard all neighbors as candidates
                     elif len(neighbors) > 0:
                         nid = neighbors['id']
                         nexts = np.concatenate((nexts, nid))
+                    ## No candidates
                     else:
                         nid = np.array([0])
+                
+                # No neighbor galaxy
                 else:
                     nid = np.array([0])
                 
+                # If leaf exists, write nextids
                 if iout in self.data.dict_leaves.keys():
                     if igal['id'] in self.data.dict_leaves[iout].keys():
                         ileaf = self.data.dict_leaves[iout][igal['id']]
                         ileaf.nextids[jout] = nid
             
         nexts = np.concatenate((nexts, np.array([0,0,0])))
-        nextnids = np.unique( nexts[nexts>0] )
+        nexts = np.unique( nexts[nexts>0] )
         
-        clock.done(add=f"({iout}({istep})->{jout}({jstep}) nextns={nextnids})")
-        return nextnids, jout
+        clock.done(add=f"({iout}({istep})->{jout}({jstep}) nextns={nexts})")
+        return nexts, jout
     
 
     def find_candidates(self, masscut_percent=1, nstep=5, nnext=5, prefix="", **kwargs):
@@ -297,24 +301,30 @@ class Leaf():
             jstep = self.istep-1-i if self.prog else self.istep+1+i
             if jstep > 0 and jstep <= np.max(self.data.nstep):
                 jout = step2out(jstep, galaxy=self.galaxy, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep)
+                # Next candidates ID
                 if jout in keys:
                     self.data.debugger.info(f"{prefix} *** jout(jstep)={jout}({jstep}) is already calculated!")
                     nextnids = self.nextnids[jout]
                 else:
                     nextnids, jout = self.load_nextids(igals, njump=njump, masscut_percent=masscut_percent, nnext=nnext, prefix=prefix, **kwargs)
                     
-                # self.data.debugger.info(f"*** jout(jstep)={jout}({jstep}), nextns={nextnids}")
+                # Jump
                 if len(nextnids) == 0:
                     self.data.debugger.info("JUMP!!")
                     njump += 1
+                # Strict check
                 else:
+                    ## Test whether they are really candidates
                     nextnids = self.branch.update_cands(jout, nextnids, checkids=self.pid, prefix=prefix) # -> update self.branch.candidates & self.branch.scores
+                    ## Jump
                     if len(nextnids) == 0:
                         self.data.debugger.info("JUMP!!")
                         njump += 1
+                    ## Load galaxies from candidates
                     else:
                         njump = 0
                         igals = self.data.load_gal(jout, nextnids, return_part=False, prefix=prefix)
+                # Update next IDs
                 self.nextnids[jout] = nextnids
 
         clock.done()
@@ -373,7 +383,7 @@ class Leaf():
             igalkeys = list(otherleaf.saved_matchrates[checkiout].keys())
             if checkid in igalkeys:
                 val = otherleaf.saved_matchrates[checkiout][checkid]
-                self.data.debugger.debug(f"{[prefix]} [G{checkid} at {checkiout}] is already saved in [L{otherleaf.galid} at {otherleaf.iout}]")
+                self.data.debugger.debug(f"{prefix} [G{checkid} at {checkiout}] is already saved in [L{otherleaf.galid} at {otherleaf.iout}]")
             else:
                 calc = True
         else:
@@ -436,7 +446,7 @@ class Leaf():
             igalkeys = list(otherleaf.saved_veloffsets[self.iout].keys())
             if self.galid in igalkeys:
                 val = otherleaf.saved_veloffsets[self.iout][self.galid]
-                self.data.debugger.debug(f"{[prefix]} [L{self.galid} at {self.iout}] is already saved in [L{otherleaf.galid}] at {otherleaf.iout}]")
+                self.data.debugger.debug(f"{prefix} [L{self.galid} at {self.iout}] is already saved in [L{otherleaf.galid}] at {otherleaf.iout}]")
             else:
                 calc = True
         else:

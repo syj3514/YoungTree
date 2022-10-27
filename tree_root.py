@@ -199,6 +199,7 @@ class Treebase():
                 go = backup_dict["Queue"]['go']
 
                 ## Read saved branch keys
+                dprint_("\n", self.debugger)
                 self.debugger.info(f"{prefix_import} Branch restoration...")
                 branchkeys = np.asarray(list(backup_dict["Branch"].keys()))
                 keys = list(self.branches_queue.keys())
@@ -210,6 +211,7 @@ class Treebase():
                         self.branches_queue[key].import_backup(backup_dict["Branch"][(iout, key)])
 
                 ## Read saved leaf keys
+                dprint_("\n", self.debugger)
                 self.debugger.info(f"{prefix_import} Leaf restoration...")
                 for iiout in backup_dict["Leaf"].keys():
                     for name in backup_dict["Leaf"][iiout]:
@@ -317,29 +319,37 @@ class Treebase():
         
         # Snapshot
         keys = list( self.dict_snap.keys() )
+        temp = []
         if len(keys)>0:
+            refmem = MB()
             for iout in keys:
                 istep = out2step(iout, galaxy=self.galaxy, mode=self.simmode, nout=self.nout, nstep=self.nstep)
                 if (istep > cstep+5 and self.prog) or (istep < cstep-5 and not self.prog):
-                    refmem = MB()
                     self.dict_snap[iout].clear()
                     self.dict_snap[iout] = None
                     del self.dict_snap[iout]
-                    gc.collect()
-                    self.debugger.info(f"* [flush][snapshot] remove iout={iout} ({refmem-MB():.2f} MB saved)")
+                    temp.append(iout)
+            gc.collect()
+            if len(temp)>0:
+                self.debugger.info(f"* [flush][snapshot] remove {len(temp)} iouts ({np.min(temp)}~{np.max(temp)}) ({refmem-MB():.2f} MB saved)")
+        
         # GalaxyMaker
         keys = list( self.dict_gals["galaxymakers"].keys() )
+        temp = []
         if len(keys)>0:
+            refmem = MB()
             for iout in keys:
                 istep = out2step(iout, galaxy=self.galaxy, mode=self.simmode, nout=self.nout, nstep=self.nstep)
                 if (istep > cstep+5 and self.prog) or (istep < cstep-5 and not self.prog):
-                    refmem = MB()
                     self.dict_gals['galaxymakers'][iout] = None
                     self.dict_gals['gmpids'][iout] = None
                     del self.dict_gals['galaxymakers'][iout]
                     del self.dict_gals['gmpids'][iout]
-                    gc.collect()
-                    self.debugger.info(f"* [flush][{self.Galstr}] remove iout={iout} ({refmem-MB():.2f} MB saved)")
+                    temp.append(iout)
+            gc.collect()
+            if len(temp)>0:
+                self.debugger.info(f"* [flush][{self.Galstr}] remove {len(temp)} iouts ({np.min(temp)}~{np.max(temp)}) ({refmem-MB():.2f} MB saved)")
+        
         # Star
         keys = list( self.dict_part.keys() )
         if len(keys)>0:
@@ -347,19 +357,19 @@ class Treebase():
                 istep = out2step(iout, galaxy=self.galaxy, mode=self.simmode, nout=self.nout, nstep=self.nstep)
                 if (istep > cstep+5 and self.prog) or (istep < cstep-5 and not self.prog):
                     jkeys = list(self.dict_part[iout].keys())
+                    refmem = MB()
                     for galid in jkeys:
-                        refmem = MB()
                         self.dict_part[iout][galid].table = []
                         self.dict_part[iout][galid].snap.clear()
                         self.dict_part[iout][galid] = None
                         del self.dict_part[iout][galid]
-                        gc.collect()
-                        self.debugger.info(f"* [flush][{self.Partstr}] remove iout={iout} {self.galstr}={galid} ({refmem-MB():.2f} MB saved)")
-                    refmem = MB()
+                    # gc.collect()
+                    # self.debugger.info(f"* [flush][{self.Partstr}] remove iout={iout} {self.galstr}={galid} ({refmem-MB():.2f} MB saved)")
+                    # refmem = MB()
                     self.dict_part[iout] = None
                     del self.dict_part[iout]
                     gc.collect()
-                    self.debugger.info(f"* [flush][{self.Partstr}] remove iout={iout} garbage ({refmem-MB():.2f} MB saved)")
+                    self.debugger.info(f"* [flush][{self.Partstr}] remove iout={iout} ({len(jkeys)} gals) ({refmem-MB():.2f} MB saved)")
         # Leaf
         keys = list( self.dict_leaves.keys() )
         if len(keys)>0:
@@ -367,6 +377,7 @@ class Treebase():
                 istep = out2step(iout, galaxy=self.galaxy, mode=self.simmode, nout=self.nout, nstep=self.nstep)
                 if (istep > cstep+5 and self.prog) or (istep < cstep-5 and not self.prog):
                     jkeys = list(self.dict_leaves[iout].keys())
+                    temp = [0, 0, 0]
                     for galid in jkeys:
                         if len(self.dict_leaves[iout][galid].parents)==0:
                             if self.dict_leaves[iout][galid].clear_ready:
@@ -377,10 +388,17 @@ class Treebase():
                                 self.dict_leaves[iout][galid].clear(msgfrom="flush_auto")
                                 self.dict_leaves[iout][galid] = None
                                 del self.dict_leaves[iout][galid]
-                                gc.collect()
-                                self.debugger.info(f"* [flush][Leaf] remove iout={iout} {self.galstr}={galid} ({refmem-MB():.2f} MB saved)")
+                                temp[0] += 1
                             else:
                                 self.dict_leaves[iout][galid].clear()
+                                temp[1] += 1
+                        else:
+                            # dprint_(f"Why does (L{self.dict_leaves[iout][galid].galid} at {self.dict_leaves[iout][galid].iout}) still have parents??", self.debugger)
+                            # dprint_(f">>> {self.dict_leaves[iout][galid].parents}", self.debugger)
+                            self.dict_leaves[iout][galid].parents = []
+                            temp[2] += 1
+                    gc.collect()
+                    self.debugger.info(f"* [flush][Leaf] (at {iout}) {temp[0]} leaves removed, {temp[1]} leaves will be removed, {temp[2]} leaves have parents ({refmem-MB():.2f} MB saved)")
                     if len(self.dict_leaves[iout].keys())==0:
                         refmem = MB()
                         self.dict_leaves[iout] = None
@@ -506,6 +524,8 @@ class Treebase():
             #         self.debugger.info(prefix+f" snap.clear!! ({snap.part_data.nbytes / 2**30:.2f} GB)")
             #         snap.clear()
             if self.loadall:
+                if snap.part_data is None:
+                    snap.get_part(onlystar=self.galaxy, target_fields=['id', 'x', 'y', 'z', 'vx', 'vy', 'vz', 'm'])
                 # clock2 = timer(text=prefix+"[get_part]00", verbose=self.verbose, debugger=self.debugger)
                 # if len(snap.part_data['id']) != np.max(snap.part_data['id']):
                 #     raise ValueError(f"ID:{np.min(snap.part_data['id'])}~{np.max(snap.part_data['id'])} vs len:{len(snap.part_data['id'])}")
