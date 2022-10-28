@@ -487,7 +487,6 @@ class Treebase():
         
 
         if not galid in self.dict_leaves[iout].keys():
-            func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
             # clock2 = timer(text=prefix+"[GalaxyMaker load]", verbose=self.verbose, debugger=self.debugger)
             if gal is None:
                 gal = self.load_gal(iout, galid, prefix=prefix)
