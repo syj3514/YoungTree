@@ -60,6 +60,8 @@ def make_logname(mode, iout, dirname='./log', logprefix=None, overwrite=False):
         os.mkdir(dirname+f"/{mode}")
     if logprefix is None:
         logprefix = f"output_"
+    if logprefix[-1] != "_":
+        logprefix = f"{logprefix}_"
 
     if iout<0:
         fname = f"{dirname}/{mode}/{logprefix}{mode}_ini.log"

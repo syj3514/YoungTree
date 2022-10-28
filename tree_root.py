@@ -164,6 +164,8 @@ class Treebase():
         ### Write queue information to attributes
         self.initial_out = iout
         self.initial_galids = gals['id']
+        if (self.treeleng is None)&(treeleng is None):
+            treeleng = len(self.nout)
         self.treeleng = treeleng
         self.interplay = interplay
         self.nout = self.nout[self.nout<=iout] if self.prog else self.nout[self.nout>=iout]
@@ -236,9 +238,9 @@ class Treebase():
                 ## Loop for each branch
                 keys = list( self.branches_queue.keys() )
                 len_branch = len(keys)
+                go = False
                 for key in keys:
                     # Find candidates & calculate scores
-                    go = False
                     iprefix = prefix+f"<{key:05d}> "
                     igo = self.branches_queue[key].do_onestep(jout, prefix=iprefix)
                     igo = igo & self.branches_queue[key].go

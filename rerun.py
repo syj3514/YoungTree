@@ -10,15 +10,16 @@ from tree_utool import *
 from tree_root import Treebase
 import importlib
 
-module = input("params? (____.py)")
-params = importlib.import_module(module)
+# module = input("params? (____.py)")
+# params = importlib.import_module(module)
 
 
 mode = input("Mode: (hagn, nh, y39990, ...)")
 fname = input(f"`./log/[ fname ]_{mode}_ini.log.params` file: ") #########################
+logprefix = f"re_{fname}"
 fname = f"./log/{mode}/{fname}_{mode}_ini.log.params"
 p = pklload(fname) #########################
-p.logprefix = f"re_{p.logprefix}"
+p.logprefix = logprefix
 #########################################################
 ###############         Targets                ##########
 #########################################################
