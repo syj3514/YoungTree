@@ -148,7 +148,7 @@ class Branch():
             self.data.loadall = False                
 
         for iout, galid, score in status["leaves_and_scores"]:
-            self.leaves[iout] = self.data.load_gal(iout, galid, fastrrack=True)
+            self.leaves[iout] = self.data.load_gal(iout, galid, return_part=False)
             self.leave_scores[iout] = score
         
         if switch:
