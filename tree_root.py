@@ -399,7 +399,7 @@ class Treebase():
                     jkeys = list(self.dict_leaves[iout].keys())
                     temp = [0, 0, 0]
                     for galid in jkeys:
-                        self.dict_leaves[iout][galid].report(prefix=prefix+"_before")
+                        # self.dict_leaves[iout][galid].report(prefix=prefix+"_before")
                         if len(self.dict_leaves[iout][galid].parents)==0:
                             if self.dict_leaves[iout][galid].clear_ready:
                                 refmem = MB()
@@ -426,8 +426,8 @@ class Treebase():
                             if switch:
                                 self.dict_leaves[iout][galid].parents = []
                                 temp[1] += 1
-                        if galid in self.dict_leaves[iout].keys():
-                            self.dict_leaves[iout][galid].report(prefix=prefix+"_after")
+                        # if galid in self.dict_leaves[iout].keys():
+                        #     self.dict_leaves[iout][galid].report(prefix=prefix+"_after")
                     gc.collect()
                     self.debugger.info(f"* [flush][Leaf] (at {iout}) {temp[0]} leaves removed, {temp[1]} leaves will be removed, {temp[2]} leaves have parents ({refmem-MB():.2f} MB saved)")
                     if len(self.dict_leaves[iout].keys())==0:

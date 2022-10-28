@@ -365,7 +365,7 @@ class Leaf():
     def calc_matchrate(self, otherleaf, checkpid=None, weight=None, checkiout=0, checkid=0, prefix=""):
         # Subject to `calc_score` BOTTLENECK!!
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
-        clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger, level='debug')
+        # clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger, level='debug')
 
         if checkiout == 0:
             checkiout = self.iout
@@ -392,21 +392,21 @@ class Leaf():
                 return -1
 
             ind = large_isin(checkpid, otherleaf.pid)
-            clock.done(add=f"({len(checkpid)} vs {otherleaf.nparts})")
+            # clock.done(add=f"({len(checkpid)} vs {otherleaf.nparts})")
             if howmany(ind,True)==0:
                 val = -1
             else:
                 val = np.sum( weight[ind] ) / np.sum( weight )
             otherleaf.saved_matchrates[checkiout][checkid] = val
-        else:
-            clock.done()
+        # else:
+            # clock.done()
         return val
 
 
     def calc_bulkmotion(self, checkind=None, prefix="", **kwargs):
         # Subject to `calc_velocity_offset`
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
-        clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger, level='debug')
+        # clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger, level='debug')
 
 
         if checkind is None:
@@ -419,14 +419,14 @@ class Leaf():
         vy = np.convolve( self.pvy[checkind], weights[::-1], mode='valid' )[0]
         vz = np.convolve( self.pvz[checkind], weights[::-1], mode='valid' )[0]
 
-        clock.done(add=f"({howmany(checkind, True)})")
+        # clock.done(add=f"({howmany(checkind, True)})")
         return np.array([vx, vy, vz])
 
     
     def calc_velocity_offset(self, otherleaf, prefix="", **kwargs):
         # Subject to `calc_score`
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
-        clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger, level='debug')
+        # clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger, level='debug')
 
         calc = False
         ioutkeys = list(otherleaf.saved_veloffsets.keys())
@@ -444,7 +444,7 @@ class Leaf():
         if calc:
             ind = large_isin(otherleaf.pid, self.pid)
             if howmany(ind, True) < 3:
-                clock.done(add=f"({self.nparts} vs {howmany(ind, True)})")
+                # clock.done(add=f"({self.nparts} vs {howmany(ind, True)})")
                 val = 0
             else:
                 refv = np.array([self.gal_gm['vx'], self.gal_gm['vy'], self.gal_gm['vz']])
@@ -453,5 +453,5 @@ class Leaf():
                 val = 1 - nbnorm(totv - inv)/(nbnorm(inv)+nbnorm(totv))
             otherleaf.saved_veloffsets[self.iout][self.galid] = val
 
-            clock.done(add=f"({self.nparts} vs {howmany(ind, True)})")
+            # clock.done(add=f"({self.nparts} vs {howmany(ind, True)})")
         return val

@@ -431,7 +431,7 @@ class Branch():
         leaf.clear_ready = False
         if leaf.pruned:
             self.data.load_leaf(leaf.iout, leaf.galid, self, gal=None, prefix=prefix)
-        if leaf.branch.rootid != self.rootid:
+        if leaf.branch != self:
             if not leaf.branch in leaf.otherbranch:
                 if hasattr(leaf.branch, "rootid"):
                     leaf.otherbranch.append(leaf.branch)
