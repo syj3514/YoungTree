@@ -258,7 +258,7 @@ class Branch():
         else:
             self.go = False
         
-        if not self.go:
+        if (not self.go) and (len(self.candidates.keys())>0):
             dprint_("*** This branch reached final stage! (go=False)", self.data.debugger)
             dprint_(f"*** Let's choose root leaf of remained branches({[keys]})", self.data.debugger)
             keys = list(self.candidates.keys())

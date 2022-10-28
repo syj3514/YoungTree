@@ -404,6 +404,8 @@ class Leaf():
             else:
                 val = np.sum( weight[ind] ) / np.sum( weight )
             otherleaf.saved_matchrates[checkiout][checkid] = val
+        else:
+            clock.done()
         return val
 
 

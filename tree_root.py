@@ -303,22 +303,35 @@ class Treebase():
 
         clock.done()
 
-    def flush_auto(self, prefix=""):
+    def flush_auto(self, jout=None, prefix=""):
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
         reftot = MB()
 
-        cout = -1 if self.prog else 10000
-        keys = list( self.dict_snap.keys() )
-        if len(keys)>0:
-            cout = max(np.min(keys), cout) if self.prog else min(np.max(keys), cout)
-        keys = list( self.dict_gals["galaxymakers"].keys() )
-        if len(keys)>0:
-            cout = max(np.min(keys), cout) if self.prog else min(np.max(keys), cout)
-        keys = list( self.dict_part.keys() )
-        if len(keys)>0:
-            cout = max(np.min(keys), cout) if self.prog else min(np.max(keys), cout)
-        cstep = out2step(cout, galaxy=self.galaxy, mode=self.simmode, nout=self.nout, nstep=self.nstep)
+        if jout is None:
+            cout = -1 if self.prog else 10000
+            keys = list( self.dict_snap.keys() )
+            if len(keys)>0:
+                cout = max(np.min(keys), cout) if self.prog else min(np.max(keys), cout)
+            keys = list( self.dict_gals["galaxymakers"].keys() )
+            if len(keys)>0:
+                cout = max(np.min(keys), cout) if self.prog else min(np.max(keys), cout)
+            keys = list( self.dict_part.keys() )
+            if len(keys)>0:
+                cout = max(np.min(keys), cout) if self.prog else min(np.max(keys), cout)
+            cstep = out2step(cout, galaxy=self.galaxy, mode=self.simmode, nout=self.nout, nstep=self.nstep)
+            jstep = cstep+5 if self.prog else cstep-5
+            jout = step2out(jstep, galaxy=self.galaxy, mode=self.simmode, nout=self.nout, nstep=self.nstep)
+        else:
+            jstep = out2step(jout, galaxy=self.galaxy, mode=self.simmode, nout=self.nout, nstep=self.nstep)
+        if self.prog:
+            dprint_(f"[flush notice]")
+            dprint_(f"iout > {jout} will be removed")
+            dprint_(f"Thank you")
+        else:
+            dprint_(f"[flush notice]")
+            dprint_(f"iout < {jout} will be removed")
+            dprint_(f"Thank you")
         
         # Snapshot
         keys = list( self.dict_snap.keys() )
@@ -327,7 +340,7 @@ class Treebase():
             refmem = MB()
             for iout in keys:
                 istep = out2step(iout, galaxy=self.galaxy, mode=self.simmode, nout=self.nout, nstep=self.nstep)
-                if (istep > cstep+5 and self.prog) or (istep < cstep-5 and not self.prog):
+                if (istep > jstep and self.prog) or (istep < jstep and not self.prog):
                     self.dict_snap[iout].clear()
                     self.dict_snap[iout] = None
                     del self.dict_snap[iout]
@@ -343,7 +356,7 @@ class Treebase():
             refmem = MB()
             for iout in keys:
                 istep = out2step(iout, galaxy=self.galaxy, mode=self.simmode, nout=self.nout, nstep=self.nstep)
-                if (istep > cstep+5 and self.prog) or (istep < cstep-5 and not self.prog):
+                if (istep > jstep and self.prog) or (istep < jstep and not self.prog):
                     self.dict_gals['galaxymakers'][iout] = None
                     self.dict_gals['gmpids'][iout] = None
                     del self.dict_gals['galaxymakers'][iout]
@@ -358,7 +371,7 @@ class Treebase():
         if len(keys)>0:
             for iout in keys:
                 istep = out2step(iout, galaxy=self.galaxy, mode=self.simmode, nout=self.nout, nstep=self.nstep)
-                if (istep > cstep+5 and self.prog) or (istep < cstep-5 and not self.prog):
+                if (istep > jstep and self.prog) or (istep < jstep and not self.prog):
                     jkeys = list(self.dict_part[iout].keys())
                     refmem = MB()
                     for galid in jkeys:
@@ -378,7 +391,7 @@ class Treebase():
         if len(keys)>0:
             for iout in keys:
                 istep = out2step(iout, galaxy=self.galaxy, mode=self.simmode, nout=self.nout, nstep=self.nstep)
-                if (istep > cstep+5 and self.prog) or (istep < cstep-5 and not self.prog):
+                if (istep > jstep and self.prog) or (istep < jstep and not self.prog):
                     jkeys = list(self.dict_leaves[iout].keys())
                     temp = [0, 0, 0]
                     for galid in jkeys:

@@ -135,7 +135,7 @@ else:
     debugger.info(" ")
     print()
         
-
+pklsave(p, f"{fname}.params", overwrite=True)
 
 #########################################################
 ###############         Tree Making                ######
