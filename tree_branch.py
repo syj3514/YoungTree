@@ -259,8 +259,8 @@ class Branch():
             self.go = False
         
         if not self.go:
-            dprint_("*** This branch reached final stage! (go=False)")
-            dprint_(f"*** Let's choose root leaf of remained branches({[keys]})")
+            dprint_("*** This branch reached final stage! (go=False)", self.data.debugger)
+            dprint_(f"*** Let's choose root leaf of remained branches({[keys]})", self.data.debugger)
             keys = list(self.candidates.keys())
             for key in keys:
             # while len(self.candidates.keys())>0:

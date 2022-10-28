@@ -238,6 +238,7 @@ class Treebase():
                 ## Loop for each branch
                 keys = list( self.branches_queue.keys() )
                 len_branch = len(keys)
+                dprint_(f"Let's do_onestep for {len_branch} branches!", self.debugger)
                 go = False
                 for key in keys:
                     # Find candidates & calculate scores
