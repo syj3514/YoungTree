@@ -259,13 +259,15 @@ class Branch():
             self.go = False
         
         if not self.go:
+            dprint_("*** This branch reached final stage! (go=False)")
+            dprint_(f"*** Let's choose root leaf of remained branches({[keys]})")
             keys = list(self.candidates.keys())
             for key in keys:
             # while len(self.candidates.keys())>0:
                 self.choose_winner(key, prefix=prefix)
         
         self.secrecord += time.time()-ref
-        clock.done()
+        clock.done(add=f"So, go=? >>> {self.go}")
         self.data.debugger.info(f"\n{self.summary(isprint=False)}\n\n\n")
         # except Warning as e:
         #     print("WARNING!! in do_onestep")

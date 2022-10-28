@@ -327,11 +327,11 @@ class Leaf():
                 # Update next IDs
                 self.nextnids[jout] = nextnids
 
-        clock.done()
         keys = list(self.nextnids.keys())
         if len(keys)==0:
             return False
         temp = np.sum([len(self.nextnids[key]) for key in keys])
+        clock.done(add=f"So, go=? >>> {temp > 0}")
         return temp > 0
     
 
