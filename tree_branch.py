@@ -108,20 +108,20 @@ class Branch():
         self.rootleaf = self.data.load_leaf(*status["rootleaf"], self, prefix=prefix)
         # dprint_(np.array(status["candidates"]), debugger=self.data.debugger)
         cands = np.array(status["candidates"])
-        iouts = np.unique(cands[:,0])
-        for iout in iouts:
-            galids = cands[:,1][cands[:,0]==iout]
-            self.update_cands(iout, np.atleast_1d(galids),checkids=None, prefix=prefix)
-        
-        iouts = list(self.candidates.keys())
-        if self.rootout in iouts:
-            ids = list(self.candidates[self.rootout].keys())
-            if len(ids)>0:
-                for iid in ids:
-                    self.disconnect(self.candidates[self.rootout][iid], prefix=prefix)
-                    del self.candidates[self.rootout][iid]
-            del self.candidates[self.rootout]
+        if len(cands)>0:
+            iouts = np.unique(cands[:,0])
+            for iout in iouts:
+                galids = cands[:,1][cands[:,0]==iout]
+                self.update_cands(iout, np.atleast_1d(galids),checkids=None, prefix=prefix)
             
+            iouts = list(self.candidates.keys())
+            if self.rootout in iouts:
+                ids = list(self.candidates[self.rootout].keys())
+                if len(ids)>0:
+                    for iid in ids:
+                        self.disconnect(self.candidates[self.rootout][iid], prefix=prefix)
+                        del self.candidates[self.rootout][iid]
+                del self.candidates[self.rootout]          
         
         zips = zip(status["scores"], status["score0s"], status["score1s"], status["score2s"], status["score3s"])
         for scores, score0s, score1s, score2s, score3s in zips:
@@ -148,7 +148,7 @@ class Branch():
             self.data.loadall = False                
 
         for iout, galid, score in status["leaves_and_scores"]:
-            self.leaves[iout] = self.data.load_gal(iout, galid)
+            self.leaves[iout] = self.data.load_gal(iout, galid, fastrrack=True)
             self.leave_scores[iout] = score
         
         if switch:

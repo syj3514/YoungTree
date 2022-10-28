@@ -224,7 +224,7 @@ class Treebase():
                         leaf.import_backup(status_leaf)
                 
                 ## Discard useless data
-                self.flush_auto(prefix=prefix_import)
+                self.flush_auto(jout=jout, prefix=prefix_import)
 
             ### Main loop
             for jout in outs:
@@ -251,7 +251,7 @@ class Treebase():
                         del self.branches_queue[key]
                     else: go=True
                     gc.collect()
-                self.flush_auto(prefix=prefix)
+                self.flush_auto(jout=jout, prefix=prefix)
                 self.debugger.info(f"{prefix}\n{self.summary()}")
                 
                 ## Status update
@@ -325,13 +325,13 @@ class Treebase():
         else:
             jstep = out2step(jout, galaxy=self.galaxy, mode=self.simmode, nout=self.nout, nstep=self.nstep)
         if self.prog:
-            dprint_(f"[flush notice]")
-            dprint_(f"iout > {jout} will be removed")
-            dprint_(f"Thank you")
+            dprint_(f"[flush notice]", self.debugger)
+            dprint_(f"iout > {jout} will be removed", self.debugger)
+            dprint_(f"Thank you", self.debugger)
         else:
-            dprint_(f"[flush notice]")
-            dprint_(f"iout < {jout} will be removed")
-            dprint_(f"Thank you")
+            dprint_(f"[flush notice]", self.debugger)
+            dprint_(f"iout < {jout} will be removed", self.debugger)
+            dprint_(f"Thank you", self.debugger)
         
         # Snapshot
         keys = list( self.dict_snap.keys() )
@@ -446,34 +446,41 @@ class Treebase():
         if psutil.Process().memory_info().rss / 2 ** 30 > self.flush_GB+self.iniGB:
             self.flush_auto(prefix=prefix)
 
-        if not iout in self.dict_gals["galaxymakers"].keys():
-            func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
-            snap = self.load_snap(iout, prefix=prefix)
-            gm, temp = uhmi.HaloMaker.load(snap, galaxy=self.galaxy, load_parts=True, double_precision=self.dp) #<-- Bottleneck!
-            gmpid = np.array(temp)
-            self.dict_gals["galaxymakers"][iout] = gm
-            cumparts = np.insert(np.cumsum(gm["nparts"]), 0, 0)
-            # gmpid = [gmpid[ cumparts[i]:cumparts[i+1] ] for i in range(len(gm))]
-            gmpid = tuple(gmpid[ cumparts[i]:cumparts[i+1] ] for i in range(len(gm)))
-            self.dict_gals["gmpids"][iout] = gmpid #<-- Bottleneck!
-            del gm; del gmpid; del cumparts; del temp
-            gc.collect()
-            if self.loadall:
-                clock2 = timer(text=prefix+f"loadall ({iout}): <get_part>", verbose=self.verbose, debugger=self.debugger)
-                snap.box = np.array([[0, 1], [0, 1], [0, 1]])
-                snap.get_part(onlystar=self.galaxy, target_fields=['id', 'x', 'y', 'z', 'vx', 'vy', 'vz', 'm'])
-                snap.part_data['id'] = np.abs(snap.part_data['id'])
-                clock2.done()
-                clock2 = timer(text=prefix+f"loadall ({iout}): <argsort>", verbose=self.verbose, debugger=self.debugger)
-                arg = np.argsort(snap.part_data['id'])
-                snap.part_data = snap.part_data[arg]
-                snap.part.table = snap.part_data
-                self.dict_snap[iout] = snap
-                clock2.done()
-                clock2 = timer(text=prefix+f"loadall ({iout}): <part2dict>", verbose=self.verbose, debugger=self.debugger)
-                for gal in self.dict_gals["galaxymakers"][iout]:
-                    self.load_part(iout, gal['id'], prefix=prefix, silent=False, galaxy=self.galaxy)
-                clock2.done()
+        if return_part:
+            if not iout in self.dict_gals["gmpids"].keys():
+                func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
+                snap = self.load_snap(iout, prefix=prefix)
+                gm, temp = uhmi.HaloMaker.load(snap, galaxy=self.galaxy, load_parts=True, double_precision=self.dp) #<-- Bottleneck!
+                gmpid = np.array(temp)
+                self.dict_gals["galaxymakers"][iout] = gm
+                cumparts = np.insert(np.cumsum(gm["nparts"]), 0, 0)
+                # gmpid = [gmpid[ cumparts[i]:cumparts[i+1] ] for i in range(len(gm))]
+                gmpid = tuple(gmpid[ cumparts[i]:cumparts[i+1] ] for i in range(len(gm)))
+                self.dict_gals["gmpids"][iout] = gmpid #<-- Bottleneck!
+                del gm; del gmpid; del cumparts; del temp
+                if self.loadall:
+                    clock2 = timer(text=prefix+f"loadall ({iout}): <get_part>", verbose=self.verbose, debugger=self.debugger)
+                    snap.box = np.array([[0, 1], [0, 1], [0, 1]])
+                    snap.get_part(onlystar=self.galaxy, target_fields=['id', 'x', 'y', 'z', 'vx', 'vy', 'vz', 'm'])
+                    snap.part_data['id'] = np.abs(snap.part_data['id'])
+                    clock2.done()
+                    clock2 = timer(text=prefix+f"loadall ({iout}): <argsort>", verbose=self.verbose, debugger=self.debugger)
+                    arg = np.argsort(snap.part_data['id'])
+                    snap.part_data = snap.part_data[arg]
+                    snap.part.table = snap.part_data
+                    self.dict_snap[iout] = snap
+                    clock2.done()
+                    clock2 = timer(text=prefix+f"loadall ({iout}): <part2dict>", verbose=self.verbose, debugger=self.debugger)
+                    for gal in self.dict_gals["galaxymakers"][iout]:
+                        self.load_part(iout, gal['id'], prefix=prefix, silent=False, galaxy=self.galaxy)
+                    clock2.done()
+        else:
+            if not iout in self.dict_gals["galaxymakers"].keys():
+                func = f"[{inspect.stack()[0][3]}_fast]"; prefix = f"{prefix}{func}"
+                snap = self.load_snap(iout, prefix=prefix)
+                gm = uhmi.HaloMaker.load(snap, galaxy=self.galaxy, load_parts=False, double_precision=self.dp) #<-- Bottleneck!
+                self.dict_gals["galaxymakers"][iout] = gm
+                del gm
 
         # clock.done()
         if isinstance(galid,str):
