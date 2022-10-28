@@ -127,7 +127,10 @@ class Treebase():
 
         temp = []
         for key in self.dict_gals["galaxymakers"].keys():
-            temp += f"\t{key}: {len(self.dict_gals['galaxymakers'][key])} {self.galstr}s with {np.sum([len(ia) for ia in self.dict_gals['gmpids'][key]])} {self.partstr}s\n"
+            if key in self.dict_gals["gmpids"].keys():
+                temp += f"\t{key}: {len(self.dict_gals['galaxymakers'][key])} {self.galstr}s with {np.sum([len(ia) for ia in self.dict_gals['gmpids'][key]])} {self.partstr}s\n"
+            else:
+                temp += f"\t{key}: {len(self.dict_gals['galaxymakers'][key])} {self.galstr}s with 0 {self.partstr}s\n"
         tgm = "".join(temp)
 
         temp = []
@@ -211,6 +214,7 @@ class Treebase():
                         del self.branches_queue[key]
                     else:
                         self.branches_queue[key].import_backup(backup_dict["Branch"][(iout, key)])
+                self.debugger.info(f"{prefix}\n{self.summary()}")
 
                 ## Read saved leaf keys
                 dprint_("\n", self.debugger)
