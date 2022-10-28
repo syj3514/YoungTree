@@ -95,7 +95,13 @@ class Leaf():
             else:
                 self.otherbranch.append(ib)
         
-        self.parents=status["parents"]
+        # self.parents=status["parents"]
+        temp = [ib.rootid if ib is not None else None for ib in self.otherbranch] + [self.branch.rootid if self.branch is not None else None]
+        while None in temp:
+            temp.remove(None)
+        temp = np.unique(temp)
+        self.parents = temp.tolist()
+        
         self.clear_ready=status["clear_ready"]
         self.nextids=status["nextids"]
         self.nextnids=status["nextnids"]
@@ -170,17 +176,6 @@ class Leaf():
             vels = distance3d(cvx,cvy,cvz, self.pvx, self.pvy, self.pvz)
             vels /= np.std(vels)
             dist = np.sqrt( dist**2 + vels**2 )
-            # except Warning as e:
-            #     print("WARNING!! in importance")
-            #     self.data.debugger.warning("########## WARNING #########")
-            #     self.data.debugger.warning(e)
-            #     self.data.debugger.warning(f"gal velocity {cvx}, {cvy}, {cvz}")
-            #     self.data.debugger.warning(f"len parts {self.nparts}")
-            #     self.data.debugger.warning(f"vels first tens {vels[:10]}")
-            #     self.data.debugger.warning(f"vels std {np.std(vels)}")
-            #     self.data.debugger.warning(self.summary())
-            #     breakpoint()
-            #     raise ValueError("velocity wrong!")
         self.pweight = self.pm/dist
 
         # clock.done()
@@ -383,7 +378,6 @@ class Leaf():
             igalkeys = list(otherleaf.saved_matchrates[checkiout].keys())
             if checkid in igalkeys:
                 val = otherleaf.saved_matchrates[checkiout][checkid]
-                # self.data.debugger.debug(f"{prefix} [G{checkid} at {checkiout}] is already saved in [L{otherleaf.galid} at {otherleaf.iout}]")
             else:
                 calc = True
         else:
@@ -425,14 +419,6 @@ class Leaf():
         vy = np.convolve( self.pvy[checkind], weights[::-1], mode='valid' )[0]
         vz = np.convolve( self.pvz[checkind], weights[::-1], mode='valid' )[0]
 
-        # except Warning as e:
-        #     print("WARNING!! in calc_bulkmotion")
-        #     breakpoint()
-        #     self.data.debugger.warning("########## WARNING #########")
-        #     self.data.debugger.warning(e)
-        #     self.data.debugger.warning(self.summary())
-        #     raise ValueError("velocity wrong!")
-
         clock.done(add=f"({howmany(checkind, True)})")
         return np.array([vx, vy, vz])
 
@@ -461,15 +447,11 @@ class Leaf():
                 clock.done(add=f"({self.nparts} vs {howmany(ind, True)})")
                 val = 0
             else:
-                # refv = self.calc_bulkmotion(useold=True, prefix=prefix)         # selfvel
                 refv = np.array([self.gal_gm['vx'], self.gal_gm['vy'], self.gal_gm['vz']])
                 inv = otherleaf.calc_bulkmotion(checkind=ind, prefix=prefix) - refv  # invel at self-coo
-                # self.data.debugger.debug(f"gal{refv}, ref{inv}")
                 totv = np.array([otherleaf.gal_gm['vx'], otherleaf.gal_gm['vy'], otherleaf.gal_gm['vz']]) - refv # totvel at self-coo
-                # self.data.debugger.debug(f"gal{otherleaf.gal_gm[['vx','vy','vz']]}, ref{totv}")
                 val = 1 - nbnorm(totv - inv)/(nbnorm(inv)+nbnorm(totv))
             otherleaf.saved_veloffsets[self.iout][self.galid] = val
 
             clock.done(add=f"({self.nparts} vs {howmany(ind, True)})")
-        # return 1 - np.sqrt( np.sum((totv - inv)**2) )/(np.linalg.norm(inv)+np.linalg.norm(totv))
         return val

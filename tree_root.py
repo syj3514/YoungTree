@@ -51,15 +51,6 @@ class Treebase():
         self.debugger = debugger
 
         self.repo, self.rurmode, _ = mode2repo(simmode)
-        # if simmode[0] == 'h':
-        #     self.rurmode = 'hagn'
-        #     self.repo = f"/storage4/Horizon_AGN"
-        # elif simmode[0] == 'y':
-        #     self.rurmode = 'yzics'
-        #     self.repo = f"/storage3/Clusters/{simmode[1:]}"
-        # elif simmode == 'nh':
-        #     self.rurmode = 'nh'
-        #     self.repo = "/storage6/NewHorizon"
 
         self.loadall = loadall
         self.initial_galids = np.array([])
@@ -110,6 +101,16 @@ class Treebase():
         clock.done()
         dprint_("\n", debugger=self.debugger)
 
+    def leaf_summary(self):
+        # Restore parents
+        for ikey in self.dict_leaves.keys():
+            for jkey in self.dict_leaves[ikey]:
+                temp = [ib.rootid if ib is not None else None for ib in self.dict_leaves[ikey][jkey].otherbranch] + [self.dict_leaves[ikey][jkey].branch.rootid if self.dict_leaves[ikey][jkey].branch is not None else None]
+                while None in temp:
+                    temp.remove(None)
+                temp = np.unique(temp)
+                self.dict_leaves[ikey][jkey].parents = temp.tolist()
+                # self.dict_leaves[ikey][jkey].report()
 
 
     def summary(self, isprint=False):
@@ -121,8 +122,6 @@ class Treebase():
             idict = self.dict_part[key]
             keys = list(idict.keys())
             temp += f"\t{key}: {len(idict)} {self.galstr}s with {np.sum([len(idict[ia]['id']) for ia in keys])} {self.partstr}s\n"
-            # for ikey in keys:
-            #     text += f"\t\tID{ikey:05d} Nparts{len(self.dict_part[key][ikey]['id'])}\n"
         tpart = "".join(temp)
 
         temp = []
@@ -243,6 +242,7 @@ class Treebase():
                 keys = list( self.branches_queue.keys() )
                 len_branch = len(keys)
                 dprint_(f"Let's do_onestep for {len_branch} branches!", self.debugger)
+                self.leaf_summary()
                 go = False
                 for key in keys:
                     # Find candidates & calculate scores
@@ -354,6 +354,7 @@ class Treebase():
                 self.debugger.info(f"* [flush][snapshot] remove {len(temp)} iouts ({np.min(temp)}~{np.max(temp)}) ({refmem-MB():.2f} MB saved)")
         
         # GalaxyMaker
+        dprint_(f"\n", self.debugger)
         keys = list( self.dict_gals["galaxymakers"].keys() )
         temp = []
         if len(keys)>0:
@@ -371,6 +372,7 @@ class Treebase():
                 self.debugger.info(f"* [flush][{self.Galstr}] remove {len(temp)} iouts ({np.min(temp)}~{np.max(temp)}) ({refmem-MB():.2f} MB saved)")
         
         # Star
+        dprint_(f"\n", self.debugger)
         keys = list( self.dict_part.keys() )
         if len(keys)>0:
             for iout in keys:
@@ -383,14 +385,12 @@ class Treebase():
                         self.dict_part[iout][galid].snap.clear()
                         self.dict_part[iout][galid] = None
                         del self.dict_part[iout][galid]
-                    # gc.collect()
-                    # self.debugger.info(f"* [flush][{self.Partstr}] remove iout={iout} {self.galstr}={galid} ({refmem-MB():.2f} MB saved)")
-                    # refmem = MB()
                     self.dict_part[iout] = None
                     del self.dict_part[iout]
                     gc.collect()
                     self.debugger.info(f"* [flush][{self.Partstr}] remove iout={iout} ({len(jkeys)} gals) ({refmem-MB():.2f} MB saved)")
         # Leaf
+        dprint_(f"\n", self.debugger)
         keys = list( self.dict_leaves.keys() )
         if len(keys)>0:
             for iout in keys:
@@ -399,6 +399,7 @@ class Treebase():
                     jkeys = list(self.dict_leaves[iout].keys())
                     temp = [0, 0, 0]
                     for galid in jkeys:
+                        self.dict_leaves[iout][galid].report(prefix=prefix+"_before")
                         if len(self.dict_leaves[iout][galid].parents)==0:
                             if self.dict_leaves[iout][galid].clear_ready:
                                 refmem = MB()
@@ -413,10 +414,20 @@ class Treebase():
                                 self.dict_leaves[iout][galid].clear()
                                 temp[1] += 1
                         else:
-                            # dprint_(f"Why does (L{self.dict_leaves[iout][galid].galid} at {self.dict_leaves[iout][galid].iout}) still have parents??", self.debugger)
-                            # dprint_(f">>> {self.dict_leaves[iout][galid].parents}", self.debugger)
-                            self.dict_leaves[iout][galid].parents = []
-                            temp[2] += 1
+                            iname = self.dict_leaves[iout][galid].name()
+                            switch = True
+                            for parent in self.dict_leaves[iout][galid].parents:
+                                if parent in self.branches_queue.keys():
+                                    parent_branch = self.branches_queue[parent]
+                                    if parent_branch.currentleaf.name() == iname:
+                                        switch = False
+                                        temp[2] += 1
+                                        break
+                            if switch:
+                                self.dict_leaves[iout][galid].parents = []
+                                temp[1] += 1
+                        if galid in self.dict_leaves[iout].keys():
+                            self.dict_leaves[iout][galid].report(prefix=prefix+"_after")
                     gc.collect()
                     self.debugger.info(f"* [flush][Leaf] (at {iout}) {temp[0]} leaves removed, {temp[1]} leaves will be removed, {temp[2]} leaves have parents ({refmem-MB():.2f} MB saved)")
                     if len(self.dict_leaves[iout].keys())==0:
@@ -458,7 +469,6 @@ class Treebase():
                 gmpid = np.array(temp)
                 self.dict_gals["galaxymakers"][iout] = gm
                 cumparts = np.insert(np.cumsum(gm["nparts"]), 0, 0)
-                # gmpid = [gmpid[ cumparts[i]:cumparts[i+1] ] for i in range(len(gm))]
                 gmpid = tuple(gmpid[ cumparts[i]:cumparts[i+1] ] for i in range(len(gm)))
                 self.dict_gals["gmpids"][iout] = gmpid #<-- Bottleneck!
                 del gm; del gmpid; del cumparts; del temp

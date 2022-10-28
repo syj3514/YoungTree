@@ -12,7 +12,7 @@ class Branch():
     __slots__ = [
         'verbose', 'data','root','rootid','galaxy','mode', 'rootout',
         'rootid', 'rootstep', 'key', 'repo', 'rurmode', 'interplay', 'candidates',
-        'scores','score0s','score1s','score2s','score3s','rootleaf',
+        'scores','score0s','score1s','score2s','score3s','currentleaf',
         'inipid','inipwei','leaves','leave_scores','secrecord','go','prog','progstr'
         ]
     def __init__(self, root, DataObj, galaxy=True, mode='hagn', verbose=2, prefix="", debugger=None, interplay=False,prog=True, **kwargs):
@@ -32,20 +32,7 @@ class Branch():
         else:
             self.key='dm'
 
-        self.repo, self.rurmode, _ = mode2repo(mode)
-        # if mode[0]=='h':
-        #     self.repo = f'/storage4/Horizon_AGN/'
-        #     self.rurmode = "hagn"
-        # elif mode[0]=='y':
-        #     self.repo = f'/storage3/Clusters/{mode[1:]}'
-        #     self.rurmode = "yzics"
-        # elif mode == 'nh':
-        #     self.repo = f"/storage6/NewHorizon/"
-        #     self.rurmode = 'nh'
-        # else:
-        #     raise ValueError(f"{mode} is not supported!")
-
-        
+        self.repo, self.rurmode, _ = mode2repo(mode)      
         self.interplay=interplay
         self.candidates = {} # dictionary of Leafs
         self.scores = {}
@@ -53,9 +40,9 @@ class Branch():
         self.score1s = {}
         self.score2s = {}
         self.score3s = {}
-        self.rootleaf = self.gal2leaf(self.root, prefix=prefix)
-        self.inipid = copy.deepcopy(self.rootleaf.pid)
-        self.inipwei = copy.deepcopy(self.rootleaf.pweight)
+        self.currentleaf = self.gal2leaf(self.root, prefix=prefix)
+        self.inipid = copy.deepcopy(self.currentleaf.pid)
+        self.inipwei = copy.deepcopy(self.currentleaf.pweight)
         self.leaves = {self.rootout: self.root} # results
         self.leave_scores = {self.rootout: 1} # results
         self.secrecord = 0
@@ -86,7 +73,7 @@ class Branch():
         # and then, changed:
         name = self.name()
         status = {
-            "rootleaf":self.rootleaf.name(),
+            "rootleaf":self.currentleaf.name(),
             "candidates":tuple(self.candidates[iout][galid].name() for iout in self.candidates.keys() for galid in self.candidates[iout]),
             "scores":tuple((iout, galid, self.scores[iout][galid]) for iout in self.scores.keys() for galid in self.scores[iout]),
             "score0s":tuple((iout, galid, self.score0s[iout][galid]) for iout in self.score0s.keys() for galid in self.score0s[iout]),
@@ -105,42 +92,43 @@ class Branch():
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func} <B{self.rootid} at {self.rootout}>"
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
 
-        self.rootleaf = self.data.load_leaf(*status["rootleaf"], self, prefix=prefix)
-        # dprint_(np.array(status["candidates"]), debugger=self.data.debugger)
+        self.currentleaf = self.data.load_leaf(*status["rootleaf"], self, prefix=prefix)
         cands = np.array(status["candidates"])
         if len(cands)>0:
             iouts = np.unique(cands[:,0])
             for iout in iouts:
-                galids = cands[:,1][cands[:,0]==iout]
-                self.update_cands(iout, np.atleast_1d(galids),checkids=None, prefix=prefix)
+                if iout != self.rootout:
+                    galids = cands[:,1][cands[:,0]==iout]
+                    self.update_cands(iout, np.atleast_1d(galids),checkids=None, prefix=prefix)
             
-            iouts = list(self.candidates.keys())
-            if self.rootout in iouts:
-                ids = list(self.candidates[self.rootout].keys())
-                if len(ids)>0:
-                    for iid in ids:
-                        self.disconnect(self.candidates[self.rootout][iid], prefix=prefix)
-                        del self.candidates[self.rootout][iid]
-                del self.candidates[self.rootout]          
+        iouts = list(self.candidates.keys())
+        if self.rootout in iouts:
+            ids = list(self.candidates[self.rootout].keys())
+            if len(ids)>0:
+                for iid in ids:
+                    self.disconnect(self.candidates[self.rootout][iid], prefix=prefix)
+                    del self.candidates[self.rootout][iid]
+            del self.candidates[self.rootout]          
         
         zips = zip(status["scores"], status["score0s"], status["score1s"], status["score2s"], status["score3s"])
         for scores, score0s, score1s, score2s, score3s in zips:
             iout, galid, score = scores
-            if not iout in self.scores.keys():
-                self.scores[iout] = {}
-                self.score0s[iout] = {}
-                self.score1s[iout] = {}
-                self.score2s[iout] = {}
-                self.score3s[iout] = {}
-            _, _, score0 = score0s
-            _, _, score1 = score1s
-            _, _, score2 = score2s
-            _, _, score3 = score3s
-            self.scores[iout][galid] = score
-            self.score0s[iout][galid] = score0
-            self.score1s[iout][galid] = score1
-            self.score2s[iout][galid] = score2
-            self.score3s[iout][galid] = score3
+            if iout != self.rootout:
+                if not iout in self.scores.keys():
+                    self.scores[iout] = {}
+                    self.score0s[iout] = {}
+                    self.score1s[iout] = {}
+                    self.score2s[iout] = {}
+                    self.score3s[iout] = {}
+                _, _, score0 = score0s
+                _, _, score1 = score1s
+                _, _, score2 = score2s
+                _, _, score3 = score3s
+                self.scores[iout][galid] = score
+                self.score0s[iout][galid] = score0
+                self.score1s[iout][galid] = score1
+                self.score2s[iout][galid] = score2
+                self.score3s[iout][galid] = score3
         
         switch = False
         if self.data.loadall:
@@ -174,15 +162,23 @@ class Branch():
                     self.disconnect(self.candidates[ikey][jkey], prefix="[Branch Clear]")
                     del self.candidates[ikey][jkey]
                     del self.scores[ikey][jkey]
+                    del self.score0s[ikey][jkey]
+                    del self.score1s[ikey][jkey]
+                    del self.score2s[ikey][jkey]
+                    del self.score3s[ikey][jkey]
             if len(self.candidates[ikey].keys())<1:
                 del self.candidates[ikey]
                 del self.scores[ikey]
+                del self.score0s[ikey]
+                del self.score1s[ikey]
+                del self.score2s[ikey]
+                del self.score3s[ikey]
         self.inipid = None; self.inipwei=None
         self.root = None
         self.candidates = {}
-        self.disconnect(self.rootleaf, prefix="[Branch Clear]")
+        self.disconnect(self.currentleaf, prefix="[Branch Clear]")
         # self.data = None
-        self.rootleaf = None
+        self.currentleaf = None
         self.leaves = {}
 
     def selfsave(self):
@@ -202,7 +198,7 @@ class Branch():
     def summary(self, isprint=False):
         import textwrap
         troot = printgal(self.root, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep, isprint=isprint)
-        tcurrent = printgal(self.rootleaf.gal_gm, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep, isprint=isprint)
+        tcurrent = printgal(self.currentleaf.gal_gm, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep, isprint=isprint)
         
         temp = [f"At {a}: {b['id']}" for a,b in self.leaves.items()]
         temp = " | ".join(temp)
@@ -248,34 +244,25 @@ class Branch():
 
         self.data.debugger.info(f"\n{self.summary(isprint=False)}")
         ref = time.time()
-        self.connect(self.rootleaf, prefix=prefix)
-        self.go = self.rootleaf.find_candidates(prefix=prefix, **kwargs)
-        # dprint(f"*** go? {self.go}", self.data.debugger)
+        self.connect(self.currentleaf, prefix=prefix)
+        self.go = self.currentleaf.find_candidates(prefix=prefix, **kwargs)
         if len(self.candidates.keys())>0:
             if jout != self.rootout:
-                self.rootleaf.calc_score(prefix=prefix)
+                self.currentleaf.calc_score(prefix=prefix)
             self.choose_winner(jout, prefix=prefix)
         else:
             self.go = False
         
         if (not self.go) and (len(self.candidates.keys())>0):
+            keys = list(self.candidates.keys())
             dprint_("*** This branch reached final stage! (go=False)", self.data.debugger)
             dprint_(f"*** Let's choose root leaf of remained branches({[keys]})", self.data.debugger)
-            keys = list(self.candidates.keys())
             for key in keys:
-            # while len(self.candidates.keys())>0:
                 self.choose_winner(key, prefix=prefix)
         
         self.secrecord += time.time()-ref
         clock.done(add=f"So, go=? >>> {self.go}")
         self.data.debugger.info(f"\n{self.summary(isprint=False)}\n\n\n")
-        # except Warning as e:
-        #     print("WARNING!! in do_onestep")
-        #     breakpoint()
-        #     self.data.debugger.warning("########## WARNING #########")
-        #     self.data.debugger.warning(e)
-        #     self.data.debugger.warning(self.summary())
-        #     raise ValueError("velocity wrong!")
         return self.go
 
         
@@ -303,6 +290,11 @@ class Branch():
                     del self.candidates[key][iid]
                     self.data.debugger.debug(f"* [Branch][Reset] remove (L{iid} at {key}) ({refmem-MB():.2f} MB saved)")
                 del self.candidates[key]
+                del self.scores[key]
+                del self.score0s[key]
+                del self.score1s[key]
+                del self.score2s[key]
+                del self.score3s[key]
         gc.collect()
 
         clock.done()
@@ -416,18 +408,17 @@ class Branch():
         dprint_(prefix, self.data.debugger)
         # clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
 
-        # leaf.report(prefix=prefix)
         if leaf.branch == self:
             leaf.branch = None
         if self in leaf.otherbranch:
             leaf.otherbranch.remove(self)
         if self.rootid in leaf.parents:
             leaf.parents.remove(self.rootid)
-        if len(leaf.parents)>0 and len(leaf.otherbranch)>0:
+        if len(leaf.otherbranch)>0:
             if hasattr(leaf.otherbranch[0], "rootid"):
                 leaf.branch = leaf.otherbranch[0]
                 self.data.debugger.debug(f"{prefix} (L{leaf.galid} at {leaf.iout}) changes its parent {self.rootid} -> {leaf.otherbranch[0].rootid}")
-        leaf.clear(msgfrom="disconnect of branch")
+        leaf.clear(msgfrom=f"disconnect of branch (B{self.rootid})")
         leaf.report(prefix=prefix)
 
         # clock.done()
@@ -438,11 +429,9 @@ class Branch():
         # clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
 
         leaf.clear_ready = False
-        # isreport = True
         if leaf.pruned:
-            # isreport = False
             self.data.load_leaf(leaf.iout, leaf.galid, self, gal=None, prefix=prefix)
-        if leaf.branch != self:
+        if leaf.branch.rootid != self.rootid:
             if not leaf.branch in leaf.otherbranch:
                 if hasattr(leaf.branch, "rootid"):
                     leaf.otherbranch.append(leaf.branch)
@@ -451,11 +440,10 @@ class Branch():
             if self in leaf.otherbranch:
                 leaf.otherbranch.remove(self)
             leaf.branch = self
+            leaf.parents.append(self.rootid)
         else:
             if not self.rootid in leaf.parents:
                 leaf.parents.append(self.rootid)
-        # if isreport:
-        #     leaf.report(prefix=prefix)
 
         # clock.done()
 
@@ -486,76 +474,110 @@ class Branch():
             # Remove weird iout garbage
             ikeys = list( self.candidates.keys() )
             for ikey in ikeys:
-                if ikey > jout:
+                if ((ikey > jout)&(self.prog)) or ((ikey<jout)&(not self.prog)):
+                    dprint_(f"** [Choose_winner] remove out={ikey} which is greater than out={jout}", self.data.debugger)
                     jkeys = list( self.candidates[ikey].keys() )
                     for jkey in jkeys: # for galid
                         self.disconnect(self.candidates[ikey][jkey], prefix=prefix)
                         del self.scores[ikey][jkey]
+                        del self.score0s[ikey][jkey]
+                        del self.score1s[ikey][jkey]
+                        del self.score2s[ikey][jkey]
+                        del self.score3s[ikey][jkey]
                         del self.candidates[ikey][jkey]
                     del self.candidates[ikey]
                     del self.scores[ikey]
-            # Re-assign iout
-            if self.prog:
-                iout = np.max(list(self.candidates.keys()))
-                dprint_(f"** [Choose_winner] winner at {jout} (max_of_cand_out={iout})", self.data.debugger)
+                    del self.score0s[ikey]
+                    del self.score1s[ikey]
+                    del self.score2s[ikey]
+                    del self.score3s[ikey]
+            if len(self.candidates.keys())==0:
+                dprint_(f"** [Choose_winner] no candidates anymore", self.data.debugger)
+                self.go=False
             else:
-                iout = np.min(list(self.candidates.keys()))
-                dprint_(f"** [Choose_winner] winner at {jout} (min_of_cand_out={iout})", self.data.debugger)
-            # Main process
-            if jout==iout:
-                dprint_(f"** [Choose_winner] **********************************", self.data.debugger)
+                # Re-assign iout
+                if self.prog:
+                    iout = np.max(list(self.candidates.keys()))
+                    dprint_(f"** [Choose_winner] winner at {jout} (max_of_cand_out={iout})", self.data.debugger)
+                else:
+                    iout = np.min(list(self.candidates.keys()))
+                    dprint_(f"** [Choose_winner] winner at {jout} (min_of_cand_out={iout})", self.data.debugger)
+                # Main process
+                if jout==iout:
+                    dprint_(f"** [Choose_winner] **********************************", self.data.debugger)
 
-                # Select winner
-                winid=0; winscore=-1
-                for iid, iscore in self.scores[iout].items():
-                    if iscore > winscore:
-                        winid = iid
-                        winscore = iscore
-                dprint_(f"** (winner in {iout}) go? {self.go}", self.data.debugger)
-                dprint_(f"** [Choose_winner] winid={winid}, winscore={winscore:.4f}", self.data.debugger)
-                dprint_(f"** [Choose_winner] root leaf {self.rootleaf.gal_gm['id']} at {self.rootleaf.gal_gm['timestep']}", self.data.debugger)
-                
-                # If normal case, crown the winner at iout as king
-                if winscore > -1:
-                    self.disconnect(self.rootleaf, prefix='')
-                    self.rootleaf = self.candidates[iout][winid]
-                    self.leaves[iout] = self.rootleaf.gal_gm
-                    self.leave_scores[iout] = winscore
-                dprint_(f"** [Choose_winner] root leaf --> {self.rootleaf.gal_gm['id']} at {self.rootleaf.gal_gm['timestep']}", self.data.debugger)
-                self.go = self.rootleaf.find_candidates(prefix=prefix)
-                
-                # Remove other candidates at iout
-                ids = list( self.candidates[iout].keys() )
-                for iid in ids:
-                    refmem = MB()
-                    if iid != winid:
-                        self.disconnect(self.candidates[iout][iid], prefix=prefix)
-                    del self.candidates[iout][iid]
-                    del self.scores[iout][iid]
-                    dprint_(f"** [Choose_winner] remove (L{iid} at {iout}) ({refmem-MB():.2f} MB saved)", self.data.debugger)
-                del self.candidates[iout]
-                del self.scores[iout]
+                    # Select winner
+                    winid=0; winscore=-1
+                    for iid, iscore in self.scores[iout].items():
+                        if iscore > winscore:
+                            winid = iid
+                            winscore = iscore
+                    dprint_(f"** (winner in {iout}) go? {self.go}", self.data.debugger)
+                    dprint_(f"** [Choose_winner] winid={winid}, winscore={winscore:.4f}", self.data.debugger)
+                    dprint_(f"** [Choose_winner] root leaf {self.currentleaf.gal_gm['id']} at {self.currentleaf.gal_gm['timestep']}", self.data.debugger)
+                    
+                    # If normal case, crown the winner at iout as king
+                    if winscore > -1:
+                        self.disconnect(self.currentleaf, prefix='')
+                        self.currentleaf = self.candidates[iout][winid]
+                        self.leaves[iout] = self.currentleaf.gal_gm
+                        self.leave_scores[iout] = winscore
+                    dprint_(f"** [Choose_winner] root leaf --> {self.currentleaf.gal_gm['id']} at {self.currentleaf.gal_gm['timestep']}", self.data.debugger)
+                    self.go = self.currentleaf.find_candidates(prefix=prefix)
+                    
+                    # Remove other candidates at iout
+                    ids = list( self.candidates[iout].keys() )
+                    for iid in ids:
+                        refmem = MB()
+                        if iid != winid:
+                            self.disconnect(self.candidates[iout][iid], prefix=prefix)
+                        del self.candidates[iout][iid]
+                        del self.scores[iout][iid]
+                        del self.score0s[iout][iid]
+                        del self.score1s[iout][iid]
+                        del self.score2s[iout][iid]
+                        del self.score3s[iout][iid]
+                        dprint_(f"** [Choose_winner] remove (L{iid} at {iout}) ({refmem-MB():.2f} MB saved)", self.data.debugger)
+                    del self.candidates[iout]
+                    del self.scores[iout]
+                    del self.score0s[iout]
+                    del self.score1s[iout]
+                    del self.score2s[iout]
+                    del self.score3s[iout]
 
-                # Prune leaves
-                ikeys = list( self.candidates.keys() )
-                for ikey in ikeys: # for iout
-                    jkeys = list( self.candidates[ikey].keys() )
-                    for jkey in jkeys: # for galid
-                        if self.scores[ikey][jkey] <= -1:
-                            dprint_(f"** [Choose_winner] (L{jkey} at {ikey}), score={self.scores[ikey][jkey]}", self.data.debugger)
-                            refmem = MB()
-                            self.disconnect(self.candidates[ikey][jkey], prefix=prefix)
-                            del self.candidates[ikey][jkey]
-                            del self.scores[ikey][jkey]
-                            dprint_(f"** [Choose_winner] remove negative (L{jkey} at {ikey}) ({refmem-MB():.2f} MB saved)", self.data.debugger)
-                    if len(self.candidates[ikey].keys())<1:
-                        del self.candidates[ikey]
-                        del self.scores[ikey]
-                dprint_(f"** [Choose_winner] **********************************", self.data.debugger)
-            else:
-                dprint_(f"** [Choose_winner] we want to choose winner at {jout}, but maxiout={iout} so skip!", self.data.debugger)
+                    # Prune leaves
+                    ikeys = list( self.candidates.keys() )
+                    for ikey in ikeys: # for iout
+                        jkeys = list( self.candidates[ikey].keys() )
+                        for jkey in jkeys: # for galid
+                            if self.scores[ikey][jkey] <= -1:
+                                dprint_(f"** [Choose_winner] (L{jkey} at {ikey}), score={self.scores[ikey][jkey]}", self.data.debugger)
+                                refmem = MB()
+                                self.disconnect(self.candidates[ikey][jkey], prefix=prefix)
+                                del self.candidates[ikey][jkey]
+                                del self.scores[ikey][jkey]
+                                del self.score0s[ikey][jkey]
+                                del self.score1s[ikey][jkey]
+                                del self.score2s[ikey][jkey]
+                                del self.score3s[ikey][jkey]
+                                dprint_(f"** [Choose_winner] remove negative (L{jkey} at {ikey}) ({refmem-MB():.2f} MB saved)", self.data.debugger)
+                        if len(self.candidates[ikey].keys())<1:
+                            del self.candidates[ikey]
+                            del self.scores[ikey]
+                            del self.score0s[ikey]
+                            del self.score1s[ikey]
+                            del self.score2s[ikey]
+                            del self.score3s[ikey]
+                    dprint_(f"** [Choose_winner] **********************************", self.data.debugger)
+                else:
+                    dprint_(f"** [Choose_winner] we want to choose winner at {jout}, but maxiout={iout} so skip!", self.data.debugger)
         else:
             del self.candidates[iout]
+            del self.scores[iout]
+            del self.score0s[iout]
+            del self.score1s[iout]
+            del self.score2s[iout]
+            del self.score3s[iout]
 
         gc.collect()        
         clock.done()
