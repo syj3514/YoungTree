@@ -166,8 +166,8 @@ class Treebase():
         ### Write queue information to attributes
         self.initial_out = iout
         self.initial_galids = gals['id']
-        if (self.treeleng is None)&(treeleng is None):
-            treeleng = len(self.nout)
+        # if (self.treeleng is None)&(treeleng is None):
+        #     treeleng = len(self.nout)
         self.treeleng = treeleng
         self.interplay = interplay
         self.nout = self.nout[self.nout<=iout] if self.prog else self.nout[self.nout>=iout]
@@ -305,6 +305,7 @@ class Treebase():
             self.debugger.error(e)
             self.debugger.error(self.summary())
 
+        clock.debugger = self.debugger
         clock.done()
 
     def flush_auto(self, jout=None, prefix=""):
