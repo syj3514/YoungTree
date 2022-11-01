@@ -1,9 +1,12 @@
+from __future__ import annotations
 import inspect
 import gc
 import copy
 
 from tree_utool import *
+from tree_root import Treebase
 from tree_leaf import Leaf
+from typing import Dict
 
 #########################################################
 ###############         Branch Class                #####
@@ -15,7 +18,7 @@ class Branch():
         'scores','score0s','score1s','score2s','score3s','currentleaf',
         'inipid','inipwei','leaves','leave_scores','secrecord','go','prog','progstr'
         ]
-    def __init__(self, root, DataObj, galaxy=True, mode='hagn', verbose=2, prefix="", debugger=None, interplay=False,prog=True, **kwargs):
+    def __init__(self, root, DataObj:Treebase, galaxy=True, mode='hagn', verbose=2, prefix="", debugger=None, interplay=False,prog=True, **kwargs):
         func = f"[__Branch__]"; prefix = f"{prefix}{func}"
         clock = timer(text=prefix, verbose=verbose, debugger=debugger)
         # self.data.debugger=debugger
@@ -34,13 +37,13 @@ class Branch():
 
         self.repo, self.rurmode, _ = mode2repo(mode)      
         self.interplay=interplay
-        self.candidates = {} # dictionary of Leafs
+        self.candidates:Dict(Leaf) = {} # dictionary of Leafs
         self.scores = {}
         self.score0s = {}
         self.score1s = {}
         self.score2s = {}
         self.score3s = {}
-        self.currentleaf = self.gal2leaf(self.root, prefix=prefix)
+        self.currentleaf:Leaf = self.gal2leaf(self.root, prefix=prefix)
         self.inipid = copy.deepcopy(self.currentleaf.pid)
         self.inipwei = copy.deepcopy(self.currentleaf.pweight)
         self.leaves = {self.rootout: self.root} # results
@@ -88,7 +91,7 @@ class Branch():
         # clock.done()
         return name, status
     
-    def import_backup(self, status, prefix=""):
+    def import_backup(self, status:dict, prefix=""):
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func} <B{self.rootid} at {self.rootout}>"
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
 
@@ -245,7 +248,7 @@ class Branch():
         self.data.debugger.info(f"\n{self.summary(isprint=False)}")
         ref = time.time()
         self.connect(self.currentleaf, prefix=prefix)
-        self.go = self.currentleaf.find_candidates(prefix=prefix, **kwargs)
+        self.go = self.currentleaf.find_candidates2(prefix=prefix, **kwargs)
         if len(self.candidates.keys())>0:
             if jout != self.rootout:
                 self.currentleaf.calc_score(prefix=prefix)
@@ -403,7 +406,7 @@ class Branch():
         else:
             return []
     
-    def disconnect(self, leaf, prefix=""):
+    def disconnect(self, leaf:Leaf, prefix=""):
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func} (B{self.rootid} <-> L{leaf.galid} at {leaf.iout})"
         dprint_(prefix, self.data.debugger)
         # clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
@@ -423,7 +426,7 @@ class Branch():
 
         # clock.done()
 
-    def connect(self, leaf, prefix=""):
+    def connect(self, leaf:Leaf, prefix=""):
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func} (B{self.rootid} <-> L{leaf.galid} at {leaf.iout})"
         dprint_(prefix, self.data.debugger)
         # clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
@@ -523,7 +526,7 @@ class Branch():
                         self.leaves[iout] = self.currentleaf.gal_gm
                         self.leave_scores[iout] = winscore
                     dprint_(f"** [Choose_winner] root leaf --> {self.currentleaf.gal_gm['id']} at {self.currentleaf.gal_gm['timestep']}", self.data.debugger)
-                    self.go = self.currentleaf.find_candidates(prefix=prefix)
+                    self.go = self.currentleaf.find_candidates2(prefix=prefix)
                     
                     # Remove other candidates at iout
                     ids = list( self.candidates[iout].keys() )

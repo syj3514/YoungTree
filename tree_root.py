@@ -11,9 +11,11 @@ import logging
 import copy
 import traceback
 
+if not "/home/jeon/YoungTree" in sys.path:
+    sys.path.append("home/jeon/YoungTree")
 from tree_utool import *
-from tree_branch import Branch
-from tree_leaf import Leaf
+# import tree_branch
+# import tree_leaf
 
 #########################################################
 ###############         Tree Class                #######
@@ -146,6 +148,7 @@ class Treebase():
         
         
     def make_branches(self, iout, galids=None, prefix=""):
+        from tree_branch import Branch
         # Subject to queue
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
@@ -514,6 +517,7 @@ class Treebase():
             return self.dict_gals["galaxymakers"][iout][galid-1]
     
     def load_leaf(self, iout, galid, branch, gal=None, prefix=""):
+        from tree_leaf import Leaf
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
         # clock = timer(text=prefix, verbose=self.verbose, debugger=self.debugger)
 

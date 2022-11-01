@@ -1,8 +1,12 @@
+from __future__ import annotations
 import inspect
 from numpy.lib.recfunctions import append_fields, drop_fields
 from rur import uri
 
 from tree_utool import *
+from typing import List
+from tree_root import Treebase
+
 
 #########################################################
 ###############         Leaf Class                #######
@@ -13,14 +17,15 @@ class Leaf():
                 'nextids','nextnids', 'pruned','interplay',
                 'nparts','pid','pm','pweight',
                 'px','py','pz','pvx','pvy','pvz', 'prog', 'saved_matchrates', 'saved_veloffsets']
-    def __init__(self, gal, BranchObj, DataObj, verbose=1, prefix="", debugger=None, interplay=False, prog=True, **kwargs):
+    def __init__(self, gal, BranchObj, DataObj:Treebase, verbose=1, prefix="", debugger=None, interplay=False, prog=True, **kwargs):
         func = f"[__Leaf__]"; prefix = f"{prefix}{func}"
         # clock = timer(text=prefix, verbose=verbose, debugger=debugger)
         # self.data.debugger=debugger
         self.verbose = verbose
-
-        self.branch = BranchObj
-        self.otherbranch = []
+        from tree_branch import Branch
+        self.branch:Branch = BranchObj
+        self.otherbranch:List(Branch) = []
+        # self.otherbranch = []
         self.parents = [self.branch.rootid] if self.branch is not None else []
         self.data = DataObj
         self.mode, self.galaxy = self.data.simmode, self.data.galaxy
@@ -82,7 +87,7 @@ class Leaf():
         # clock.done()
         return name, status
     
-    def import_backup(self, status, prefix=""):
+    def import_backup(self, status:dict, prefix=""):
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func} <L{self.galid} at {self.iout}>"
         clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
 
@@ -179,7 +184,103 @@ class Leaf():
         self.pweight = self.pm/dist
 
         # clock.done()
-    
+# nextnids_dict = self.load_nextids2(masscut_percent=masscut_percent, nstep=nstep, nnext=nnext, prefix=prefix, **kwargs)
+    def load_nextids2(self, masscut_percent=1, nstep=5, nnext=5, prefix="", **kwargs) -> dict:
+        '''
+        Input:  One galaxy
+        Do:     Add neighbors in Leaf
+        Output: None
+        '''
+        # Subject to `find_candidates`
+        func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
+        clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
+
+        igal = self.gal_gm; iout=self.iout; istep=self.istep
+        isnap = self.data.load_snap(iout, prefix=prefix)
+        
+        kms2codegyr = isnap.unit['km'] * 1e9 * 365 * 24 * 60 * 60
+        ivel = rms(igal['vx'], igal['vy'], igal['vz'])*kms2codegyr # codeunit/gyr
+
+        nextnids_dict = {}
+
+        for ith in range(nstep):
+            jstep = istep - ith - 1
+            jout = step2out(jstep, galaxy=self.galaxy, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep)
+            if jout in self.nextids:
+                nextnids_dict[jout] = self.nextids[jout]
+            else:
+                jsnap = self.data.load_snap(jout, prefix=prefix)
+                jgals = self.data.load_gal(jout, 'all', return_part=False, prefix=prefix) # BOTTLENECK!!
+                dt = np.abs( isnap.params['age'] - jsnap.params['age'] ) # gyr
+                move = dt*ivel # codeunit
+
+                radii = 5*max(igal['r'],1e-4) + 5*move
+                neighbors = cut_sphere(jgals, igal['x']+igal['vx']*kms2codegyr*dt/2, igal['y']+igal['vy']*kms2codegyr*dt/2, igal['z']+igal['vz']*kms2codegyr*dt/2, radii, both_sphere=True)
+                
+                # Find at least 1 galaxy
+                if len(neighbors)>0:
+                    ## (m > 1%)
+                    neighbors = neighbors[neighbors['m'] >= igal['m']*masscut_percent/100]
+
+                    ## More strict check
+                    if (len(neighbors)>0) and (len(neighbors)>nnext):
+                        dprint_(f"({iout}({istep})->{jout}({jstep}) nextns={neighbors['id']}) --> ", self.data.debugger)
+                        # nexts = neighbors['id']
+                        ### Match rate
+                        rate = np.zeros(len(neighbors))-1
+                        gals, gmpids = self.data.load_gal(jout, neighbors['id'], return_part=True, prefix=prefix)
+                        ith = 0
+                        for _, gmpid in zip(gals, gmpids):
+                            try:
+                                if atleast_numba(self.pid, gmpid):
+                                    ind = large_isin(self.pid, gmpid)
+                                    rate[ith] = howmany(ind, True)/len(self.pid)
+                            except Warning:
+                                if atleast_numba(self.pid, gmpid):
+                                    ind = large_isin(self.pid, gmpid)
+                                    rate[ith] = howmany(ind, True)/len(self.pid)
+                            ith += 1
+                        ind = rate>0
+                        neighbors, rate = neighbors[ind], rate[ind]
+                        # for ith, neigh in enumerate(gals):
+                        #     calc = True
+                        #     if jout in self.data.dict_leaves.keys():
+                        #         if neigh['id'] in self.data.dict_leaves[jout].keys():
+                        #             leaf = self.data.dict_leaves[jout][neigh['id']]
+                        #             rate[ith] = self.calc_matchrate(leaf, checkpid=self.pid, weight=self.pweight, checkiout=iout, checkid=self.galid, prefix=prefix)
+                        #             calc = False
+                        #     if calc:
+                        #         if atleast_numba(self.pid, gmpids[ith]):
+                        #             ind = large_isin(self.pid, gmpids[ith])
+                        #             rate[ith] = howmany(ind, True)/len(self.pid)
+                        # ind = rate>0
+                        # neighbors, rate = neighbors[ind], rate[ind]
+
+                        ### If too many, cut top 5
+                        if len(neighbors) > 0:
+                            if len(neighbors) > nnext:
+                                arg = np.argsort(rate)
+                                neighbors = neighbors[arg][-nnext:]
+                            nexts = neighbors['id']
+                        else:
+                            nexts = np.array([])
+                    ## Regard all neighbors as candidates
+                    elif len(neighbors) > 0:
+                        nexts = neighbors['id']
+                    ## No candidates
+                    else:
+                        nexts = np.array([])
+                
+                # No neighbor galaxy
+                else:
+                    nexts = np.array([])
+                
+                self.nextids[jout] = nexts
+                nextnids_dict[jout] = self.nextids[jout]
+                dprint_(f"--> nextns={nexts})", self.data.debugger)
+        
+        clock.done()
+        return nextnids_dict        
 
     def load_nextids(self, igals, njump=0, masscut_percent=1, nnext=5, prefix="", **kwargs): # MAIN BOTTLENECK!!
         # Subject to `find_candidates`
@@ -190,10 +291,12 @@ class Leaf():
             raise ValueError(f"`load_nextids` gots multi-out gals!")
         iout, istep = ioutistep(igals[0], galaxy=self.galaxy, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep)
         isnap = self.data.load_snap(iout, prefix=prefix)
+
         jstep = istep-1-njump if self.prog else istep+1+njump
         jout = step2out(jstep, galaxy=self.galaxy, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep)
         jsnap = self.data.load_snap(jout, prefix=prefix)
         jgals = self.data.load_gal(jout, 'all', return_part=False, prefix=prefix) # BOTTLENECK!!
+
         dt = np.abs( isnap.params['age'] - jsnap.params['age'] )
         dt *= 1e9 * 365 * 24 * 60 * 60 # Gyr to sec
         nexts = np.array([0,0,0])
@@ -217,7 +320,7 @@ class Leaf():
                 # Find at least 1 galaxy
                 if len(neighbors)>0:
                     ## (m > 1%) & (not already calced)
-                    neighbors = neighbors[(neighbors['m'] >= igal['m']*masscut_percent/100) & (~np.isin(neighbors['id'], nexts))]
+                    neighbors = neighbors[neighbors['m'] >= igal['m']*masscut_percent/100]
                     ## More strict check
                     if (len(neighbors)>0) and ((len(neighbors)>nnext) or (len(igals)>2*nnext)):
                         ### Match rate
@@ -274,8 +377,43 @@ class Leaf():
         clock.done(add=f"({iout}({istep})->{jout}({jstep}) nextns={nexts})")
         return nexts, jout
     
+    def find_candidates2(self, masscut_percent:float=1, nstep:int=5, nnext:int=10, prefix:str="", **kwargs) -> bool:
+        '''
+        Input:      Branch
+        Owner:      Leaf
+        Do:         Connect -> Loop( at next step, find candidates(nexts) -> Upload in self -> Update in branch )
+        Output:     True if at least one nexts exist
+        '''
+        func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
+        clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger)
+        
+        self.branch.connect(self, prefix=prefix)
+
+        nextnids_dict = self.load_nextids2(masscut_percent=masscut_percent, nstep=nstep, nnext=nnext, prefix=prefix, **kwargs)
+        temp = 0
+        for i in range(nstep):
+            jstep = self.istep-1-i if self.prog else self.istep+1+i
+            jout = step2out(jstep, galaxy=self.galaxy, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep)
+            if jout in nextnids_dict.keys():
+                nextnids = nextnids_dict[jout]
+                if len(nextnids)>0:
+                    nextnids = self.branch.update_cands(jout, nextnids, checkids=self.pid, prefix=prefix) # -> update self.branch.candidates & self.branch.scores
+                    temp += len(nextnids)
+
+        clock.done(add=f"So, go=? >>> {temp > 0}")
+        return temp > 0
+
+
+        
+
 
     def find_candidates(self, masscut_percent=1, nstep=5, nnext=5, prefix="", **kwargs):
+        '''
+        Input:      None
+        Owner:      Leaf
+        Do:         Connect -> Loop( at next step, find candidates(nexts) -> Upload in self -> Update in branch )
+        Output:     True if at least one nexts exist
+        '''
         ############################################################
         ########    ADD case when no nexther, jump beyond     ####### Maybe done?
         ############################################################
@@ -362,7 +500,7 @@ class Leaf():
 
         clock.done()
 
-    def calc_matchrate(self, otherleaf, checkpid=None, weight=None, checkiout=0, checkid=0, prefix=""):
+    def calc_matchrate(self, otherleaf:Leaf, checkpid=None, weight=None, checkiout=0, checkid=0, prefix="")->float:
         # Subject to `calc_score` BOTTLENECK!!
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
         # clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger, level='debug')
@@ -387,6 +525,8 @@ class Leaf():
         if calc:
             if checkpid is None:
                 checkpid = self.pid
+            if weight is None:
+                weight = self.pweight
             
             if otherleaf.nparts < len(checkpid)/200:
                 return -1
@@ -397,6 +537,7 @@ class Leaf():
                 val = -1
             else:
                 val = np.sum( weight[ind] ) / np.sum( weight )
+                val *= howmany(ind,True)/len(otherleaf.pid)
             otherleaf.saved_matchrates[checkiout][checkid] = val
         # else:
             # clock.done()
@@ -423,7 +564,7 @@ class Leaf():
         return np.array([vx, vy, vz])
 
     
-    def calc_velocity_offset(self, otherleaf, prefix="", **kwargs):
+    def calc_velocity_offset(self, otherleaf:Leaf, prefix="", **kwargs):
         # Subject to `calc_score`
         func = f"[{inspect.stack()[0][3]}]"; prefix = f"{prefix}{func}"
         # clock = timer(text=prefix, verbose=self.verbose, debugger=self.data.debugger, level='debug')
