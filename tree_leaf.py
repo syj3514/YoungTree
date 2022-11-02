@@ -205,80 +205,81 @@ class Leaf():
 
         for ith in range(nstep):
             jstep = istep - ith - 1
-            jout = step2out(jstep, galaxy=self.galaxy, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep)
-            if jout in self.nextids:
-                nextnids_dict[jout] = self.nextids[jout]
-            else:
-                jsnap = self.data.load_snap(jout, prefix=prefix)
-                jgals = self.data.load_gal(jout, 'all', return_part=False, prefix=prefix) # BOTTLENECK!!
-                dt = np.abs( isnap.params['age'] - jsnap.params['age'] ) # gyr
-                move = dt*ivel # codeunit
+            if jstep > 0 and jstep <= np.max(self.data.nstep):
+                jout = step2out(jstep, galaxy=self.galaxy, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep)
+                if jout in self.nextids:
+                    nextnids_dict[jout] = self.nextids[jout]
+                else:
+                    jsnap = self.data.load_snap(jout, prefix=prefix)
+                    jgals = self.data.load_gal(jout, 'all', return_part=False, prefix=prefix) # BOTTLENECK!!
+                    dt = np.abs( isnap.params['age'] - jsnap.params['age'] ) # gyr
+                    move = dt*ivel # codeunit
 
-                radii = 5*max(igal['r'],1e-4) + 5*move
-                neighbors = cut_sphere(jgals, igal['x']+igal['vx']*kms2codegyr*dt/2, igal['y']+igal['vy']*kms2codegyr*dt/2, igal['z']+igal['vz']*kms2codegyr*dt/2, radii, both_sphere=True)
-                
-                # Find at least 1 galaxy
-                if len(neighbors)>0:
-                    ## (m > 1%)
-                    neighbors = neighbors[neighbors['m'] >= igal['m']*masscut_percent/100]
+                    radii = 5*max(igal['r'],1e-4) + 5*move
+                    neighbors = cut_sphere(jgals, igal['x']+igal['vx']*kms2codegyr*dt/2, igal['y']+igal['vy']*kms2codegyr*dt/2, igal['z']+igal['vz']*kms2codegyr*dt/2, radii, both_sphere=True)
+                    
+                    # Find at least 1 galaxy
+                    if len(neighbors)>0:
+                        ## (m > 1%)
+                        neighbors = neighbors[neighbors['m'] >= igal['m']*masscut_percent/100]
 
-                    ## More strict check
-                    if (len(neighbors)>0) and (len(neighbors)>nnext):
-                        dprint_(f"({iout}({istep})->{jout}({jstep}) nextns={neighbors['id']}) --> ", self.data.debugger)
-                        # nexts = neighbors['id']
-                        ### Match rate
-                        rate = np.zeros(len(neighbors))-1
-                        gals, gmpids = self.data.load_gal(jout, neighbors['id'], return_part=True, prefix=prefix)
-                        ith = 0
-                        for _, gmpid in zip(gals, gmpids):
-                            try:
-                                if atleast_numba(self.pid, gmpid):
-                                    ind = large_isin(self.pid, gmpid)
-                                    rate[ith] = howmany(ind, True)/len(self.pid)
-                            except Warning:
-                                if atleast_numba(self.pid, gmpid):
-                                    ind = large_isin(self.pid, gmpid)
-                                    rate[ith] = howmany(ind, True)/len(self.pid)
-                            ith += 1
-                        ind = rate>0
-                        neighbors, rate = neighbors[ind], rate[ind]
-                        # for ith, neigh in enumerate(gals):
-                        #     calc = True
-                        #     if jout in self.data.dict_leaves.keys():
-                        #         if neigh['id'] in self.data.dict_leaves[jout].keys():
-                        #             leaf = self.data.dict_leaves[jout][neigh['id']]
-                        #             rate[ith] = self.calc_matchrate(leaf, checkpid=self.pid, weight=self.pweight, checkiout=iout, checkid=self.galid, prefix=prefix)
-                        #             calc = False
-                        #     if calc:
-                        #         if atleast_numba(self.pid, gmpids[ith]):
-                        #             ind = large_isin(self.pid, gmpids[ith])
-                        #             rate[ith] = howmany(ind, True)/len(self.pid)
-                        # ind = rate>0
-                        # neighbors, rate = neighbors[ind], rate[ind]
+                        ## More strict check
+                        if (len(neighbors)>0) and (len(neighbors)>nnext):
+                            dprint_(f"({iout}({istep})->{jout}({jstep}) nextns={neighbors['id']}) --> ", self.data.debugger)
+                            # nexts = neighbors['id']
+                            ### Match rate
+                            rate = np.zeros(len(neighbors))-1
+                            gals, gmpids = self.data.load_gal(jout, neighbors['id'], return_part=True, prefix=prefix)
+                            ith = 0
+                            for _, gmpid in zip(gals, gmpids):
+                                try:
+                                    if atleast_numba(self.pid, gmpid):
+                                        ind = large_isin(self.pid, gmpid)
+                                        rate[ith] = howmany(ind, True)/len(self.pid)
+                                except Warning:
+                                    if atleast_numba(self.pid, gmpid):
+                                        ind = large_isin(self.pid, gmpid)
+                                        rate[ith] = howmany(ind, True)/len(self.pid)
+                                ith += 1
+                            ind = rate>0
+                            neighbors, rate = neighbors[ind], rate[ind]
+                            # for ith, neigh in enumerate(gals):
+                            #     calc = True
+                            #     if jout in self.data.dict_leaves.keys():
+                            #         if neigh['id'] in self.data.dict_leaves[jout].keys():
+                            #             leaf = self.data.dict_leaves[jout][neigh['id']]
+                            #             rate[ith] = self.calc_matchrate(leaf, checkpid=self.pid, weight=self.pweight, checkiout=iout, checkid=self.galid, prefix=prefix)
+                            #             calc = False
+                            #     if calc:
+                            #         if atleast_numba(self.pid, gmpids[ith]):
+                            #             ind = large_isin(self.pid, gmpids[ith])
+                            #             rate[ith] = howmany(ind, True)/len(self.pid)
+                            # ind = rate>0
+                            # neighbors, rate = neighbors[ind], rate[ind]
 
-                        ### If too many, cut top 5
-                        if len(neighbors) > 0:
-                            if len(neighbors) > nnext:
-                                arg = np.argsort(rate)
-                                neighbors = neighbors[arg][-nnext:]
+                            ### If too many, cut top 5
+                            if len(neighbors) > 0:
+                                if len(neighbors) > nnext:
+                                    arg = np.argsort(rate)
+                                    neighbors = neighbors[arg][-nnext:]
+                                nexts = neighbors['id']
+                            else:
+                                nexts = np.array([])
+                        ## Regard all neighbors as candidates
+                        elif len(neighbors) > 0:
                             nexts = neighbors['id']
+                        ## No candidates
                         else:
                             nexts = np.array([])
-                    ## Regard all neighbors as candidates
-                    elif len(neighbors) > 0:
-                        nexts = neighbors['id']
-                    ## No candidates
+                    
+                    # No neighbor galaxy
                     else:
                         nexts = np.array([])
-                
-                # No neighbor galaxy
-                else:
-                    nexts = np.array([])
-                
-                self.nextids[jout] = nexts
-                nextnids_dict[jout] = self.nextids[jout]
-                dprint_(f"--> nextns={nexts})", self.data.debugger)
-        
+                    
+                    self.nextids[jout] = nexts
+                    nextnids_dict[jout] = self.nextids[jout]
+                    dprint_(f"--> nextns={nexts}", self.data.debugger)
+            
         clock.done()
         return nextnids_dict        
 
@@ -393,12 +394,13 @@ class Leaf():
         temp = 0
         for i in range(nstep):
             jstep = self.istep-1-i if self.prog else self.istep+1+i
-            jout = step2out(jstep, galaxy=self.galaxy, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep)
-            if jout in nextnids_dict.keys():
-                nextnids = nextnids_dict[jout]
-                if len(nextnids)>0:
-                    nextnids = self.branch.update_cands(jout, nextnids, checkids=self.pid, prefix=prefix) # -> update self.branch.candidates & self.branch.scores
-                    temp += len(nextnids)
+            if jstep > 0 and jstep <= np.max(self.data.nstep):
+                jout = step2out(jstep, galaxy=self.galaxy, mode=self.mode, nout=self.data.nout, nstep=self.data.nstep)
+                if jout in nextnids_dict.keys():
+                    nextnids = nextnids_dict[jout]
+                    if len(nextnids)>0:
+                        nextnids = self.branch.update_cands(jout, nextnids, checkids=self.pid, prefix=prefix) # -> update self.branch.candidates & self.branch.scores
+                        temp += len(nextnids)
 
         clock.done(add=f"So, go=? >>> {temp > 0}")
         return temp > 0
