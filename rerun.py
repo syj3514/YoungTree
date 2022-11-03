@@ -157,7 +157,7 @@ if backupfname[:3] == "re_":
 backup_dict = pklload(f"{backupfname}.pickle")
 
 
-MyTree = Treebase(simmode=p.mode, debugger=debugger, verbose=0, flush_GB=p.flush_GB, loadall=loadall, prog=p.prog, detail=p.detail, logprefix=p.logprefix, dp=dp)
+MyTree = Treebase(simmode=p.mode, galaxy=p.galaxy, debugger=debugger, verbose=0, flush_GB=p.flush_GB, loadall=loadall, prog=p.prog, detail=p.detail, logprefix=p.logprefix, dp=dp)
 print(backup_dict['Root']["snapkeys"])
 MyTree.import_backup(backup_dict["Root"])
 
