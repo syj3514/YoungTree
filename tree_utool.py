@@ -107,7 +107,6 @@ def dprint_(msg, debugger):
 
 def mode2repo(mode):
     dp = True
-    canonlystar = False
     if mode[0] == 'h':
         rurmode = 'hagn'
         repo = f"/storage4/Horizon_AGN"

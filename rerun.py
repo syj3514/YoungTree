@@ -109,6 +109,12 @@ else:
         targets = gals_now[(gals_now['m'] >= mmin) & (gals_now['m'] < mmax)]
         ids = targets['id']
         message = f"Mass range: {np.log10(mmin):.2f} ~ {np.log10(mmax):.2f}\n>>> {len(targets)} {galstrs} are loaded\n\t(ID={''.join([f'{ids[i]}, ' if i<min(3,len(ids)) else f', {ids[i]}' if (i>max(3,len(ids))-3) else '...' if i==min(3,len(ids)) else '' for i in range(len(ids))])})"
+    elif isinstance(p.usegals, dict):
+        center = p.usegals['center']
+        radii = p.usegals['radii']
+        targets = cut_sphere(gals_now, *center, radii, both_sphere=True)
+        ids = targets['id']
+        message = f"Sphere cut: {radii:.3f} from [{center[0]:.2f}, {center[1]:.2f}, {center[2]:.2f}]\n>>> {len(targets)} {galstrs} are loaded\n\t(ID={''.join([f'{ids[i]}, ' if i<min(3,len(ids)) else f', {ids[i]}' if (i>max(3,len(ids))-3) else '...' if i==min(3,len(ids)) else '' for i in range(len(ids))])})"
     else:
         raise TypeError(f"Couldn't understand type of `usegals` ({type(p.usegals)}) in params.py!")
     targets = np.atleast_1d(targets)

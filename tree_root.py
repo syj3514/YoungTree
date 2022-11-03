@@ -45,7 +45,7 @@ class Treebase():
             self.galstr = "gal"
             self.Galstr = "GalaxyMaker"
         else:
-            self.partstr = "DM"
+            self.partstr = "dm"
             self.Partstr = "DM"
             self.galstr = "halo"
             self.Galstr = "HaloMaker"
@@ -123,15 +123,15 @@ class Treebase():
         for key in self.dict_part.keys():
             idict = self.dict_part[key]
             keys = list(idict.keys())
-            temp += f"\t{key}: {len(idict)} {self.galstr}s with {np.sum([len(idict[ia]['id']) for ia in keys])} {self.partstr}s\n"
+            temp += f"\t{key}: {len(idict)} {self.galstr}s with {np.sum([len(idict[ia]['id']) for ia in keys])} {self.Partstr}s\n"
         tpart = "".join(temp)
 
         temp = []
         for key in self.dict_gals["galaxymakers"].keys():
             if key in self.dict_gals["gmpids"].keys():
-                temp += f"\t{key}: {len(self.dict_gals['galaxymakers'][key])} {self.galstr}s with {np.sum([len(ia) for ia in self.dict_gals['gmpids'][key]])} {self.partstr}s\n"
+                temp += f"\t{key}: {len(self.dict_gals['galaxymakers'][key])} {self.galstr}s with {np.sum([len(ia) for ia in self.dict_gals['gmpids'][key]])} {self.Partstr}s\n"
             else:
-                temp += f"\t{key}: {len(self.dict_gals['galaxymakers'][key])} {self.galstr}s with 0 {self.partstr}s\n"
+                temp += f"\t{key}: {len(self.dict_gals['galaxymakers'][key])} {self.galstr}s with 0 {self.Partstr}s\n"
         tgm = "".join(temp)
 
         temp = []
@@ -479,7 +479,7 @@ class Treebase():
                 if self.loadall:
                     clock2 = timer(text=prefix+f"loadall ({iout}): <get_part>", verbose=self.verbose, debugger=self.debugger)
                     snap.box = np.array([[0, 1], [0, 1], [0, 1]])
-                    snap.get_part(onlystar=self.galaxy, target_fields=['id', 'x', 'y', 'z', 'vx', 'vy', 'vz', 'm'])
+                    snap.get_part(pname=self.partstr, target_fields=['id', 'x', 'y', 'z', 'vx', 'vy', 'vz', 'm'])
                     snap.part_data['id'] = np.abs(snap.part_data['id'])
                     clock2.done()
                     clock2 = timer(text=prefix+f"loadall ({iout}): <argsort>", verbose=self.verbose, debugger=self.debugger)
@@ -566,7 +566,11 @@ class Treebase():
             #         snap.clear()
             if self.loadall:
                 if snap.part_data is None:
-                    snap.get_part(onlystar=self.galaxy, target_fields=['id', 'x', 'y', 'z', 'vx', 'vy', 'vz', 'm'])
+                    snap.get_part(pname=self.partstr, target_fields=['id', 'x', 'y', 'z', 'vx', 'vy', 'vz', 'm'])
+                    snap.part_data['id'] = np.abs(snap.part_data['id'])
+                    arg = np.argsort(snap.part_data['id'])
+                    snap.part_data = snap.part_data[arg]
+                    snap.part.table = snap.part_data
                 # clock2 = timer(text=prefix+"[get_part]00", verbose=self.verbose, debugger=self.debugger)
                 # if len(snap.part_data['id']) != np.max(snap.part_data['id']):
                 #     raise ValueError(f"ID:{np.min(snap.part_data['id'])}~{np.max(snap.part_data['id'])} vs len:{len(snap.part_data['id'])}")
@@ -585,7 +589,11 @@ class Treebase():
                     snap.set_box_halo(gal, 1.1*scale, use_halo_radius=True, radius_name='r')
                     # if not silent:
                         # clock2 = timer(text=prefix+"[get_part]1", verbose=self.verbose, debugger=self.debugger)
-                    snap.get_part(onlystar=self.galaxy, target_fields=['id', 'x', 'y', 'z', 'vx', 'vy', 'vz', 'm'])
+                    snap.get_part(pname=self.partstr, target_fields=['id', 'x', 'y', 'z', 'vx', 'vy', 'vz', 'm'])
+                    snap.part_data['id'] = np.abs(snap.part_data['id'])
+                    arg = np.argsort(snap.part_data['id'])
+                    snap.part_data = snap.part_data[arg]
+                    snap.part.table = snap.part_data
                     # if not silent:
                         # clock2.done();clock2 = timer(text=prefix+"[get_part]2", verbose=self.verbose, debugger=self.debugger)
                     try:
