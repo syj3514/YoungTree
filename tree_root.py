@@ -168,7 +168,10 @@ class Treebase():
 
         ### Write queue information to attributes
         self.initial_out = iout
-        self.initial_galids = gals['id']
+        if backup_dict is not None:
+            self.initial_galids = backup_dict['Root']['branches_queue']
+        else:
+            self.initial_galids = gals['id']
         # if (self.treeleng is None)&(treeleng is None):
         #     treeleng = len(self.nout)
         self.treeleng = treeleng
@@ -176,7 +179,7 @@ class Treebase():
         self.nout = self.nout[self.nout<=iout] if self.prog else self.nout[self.nout>=iout]
 
         ### Make branch objects
-        self.make_branches(iout, gals['id'], prefix=prefix)
+        self.make_branches(iout, self.initial_galids, prefix=prefix)
         self.debugger.info(f"{prefix}\n{self.summary()}")
 
         ### Main run

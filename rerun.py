@@ -151,7 +151,7 @@ print(f"[Re-Run] Allow {p.flush_GB:.2f} GB Memory")
 
 jout = input("[Re-Run] When do you want to go back? (jout): ")
 backupfname = make_logname(p.mode, int(jout), logprefix=p.logprefix[3:], overwrite=True)
-print(backupfname)
+print(f"Load backup data from `{backupfname}.pickle`")
 backup_dict = pklload(f"{backupfname}.pickle")
 
 
