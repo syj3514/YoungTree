@@ -53,6 +53,13 @@ class timer():
             else:
                 self.debugger.debug(f"{self.text} Done ({elapse/self.corr:.3f} {self.unit})")
 
+def plot():
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots()
+    fig.set_dpi(300)
+    ax.set_facecolor("k")
+    return fig, ax
+
 def make_logname(mode, iout, dirname='./log', logprefix=None, overwrite=False):
     if not os.path.isdir(dirname):
         os.mkdir(dirname)
