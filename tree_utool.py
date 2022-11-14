@@ -53,9 +53,9 @@ class timer():
             else:
                 self.debugger.debug(f"{self.text} Done ({elapse/self.corr:.3f} {self.unit})")
 
-def plot():
+def plot(**kwargs):
     import matplotlib.pyplot as plt
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(**kwargs)
     fig.set_dpi(300)
     ax.set_facecolor("k")
     return fig, ax
@@ -356,6 +356,27 @@ def large_isin(a, b):
     return result
     # return result.reshape(shape)
     # endregion
+
+
+@nb.jit(parallel=True)
+def large_isind(a, b):
+    '''
+    [numba] Return part of a which is in b
+    
+    Examples
+    --------
+    >>> a = [1,2,3,4,5,6]
+    >>> b = [2,4,6,8]
+    >>> large_isin(a,b)
+    [False, True, False, True, False, True]
+    '''
+    n = len(a)
+    result = np.full(n, False)
+    set_b = set(b)
+    for i in nb.prange(n):
+        if a[i] in set_b:
+            result[i] = True
+    return np.where(result)[0]
 
 @nb.jit(fastmath=True)
 def atleast_numba(a, b):
