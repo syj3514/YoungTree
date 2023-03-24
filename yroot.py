@@ -80,6 +80,7 @@ class TreeBase:
         self.ontime = self.p.ontime
         self.onmem = self.p.onmem
         self.oncpu = self.p.oncpu
+        self.memory = GB()
     
     def print(self, msg:str, level='debug'):
         if self.logger is None:
@@ -97,6 +98,7 @@ class TreeBase:
                 path_in_repo="" if self.p.mode[0] == '/' else "snapshots"
                 self.dict_snap[iout] = uri.RamsesSnapshot(self.p.repo, iout, mode=self.p.rurmode, path_in_repo=path_in_repo)
             _load_snap(self, iout, prefix=prefix, level=level)
+        self.memory = GB()
         return self.dict_snap[iout]
 
     def load_gals(self, iout:int, galid=None, prefix="", level='info'):
@@ -121,6 +123,7 @@ class TreeBase:
                     gm = uhmi.HaloMaker.load(snap, galaxy=self.p.galaxy, double_precision=self.p.dp, full_path=self.p.fullpath)
                 self.dict_gals[iout] = gm
             _load_gals(self, iout,galid=galid, prefix=prefix, level=level)
+        self.memory = GB()
         # Load
         if isinstance(galid,str):           # 'all'
             if galid=='all':
@@ -131,27 +134,55 @@ class TreeBase:
         else:                               # One galaxy
             return self.dict_gals[iout][galid-1]
 
+    def read_part_halo_match(self, iout):
+        self.memory = GB()
+        if not iout in self.part_halo_match.keys():
+            self.load_gals(iout, galid='all')
+        if iout in self.part_halo_match.keys():
+            if len(self.part_halo_match[iout])>0:
+                return self.part_halo_match[iout]
+            elif os.path.isfile(f"{self.p.resultdir}/{self.p.logprefix}_{iout}_partmatch.pkl"):
+                return pklload(f"{self.p.resultdir}/{self.p.logprefix}_{iout}_partmatch.pkl")
+            else:
+                raise ValueError(f"Cannot find `part_halo_match` at {iout}!")
+        else:
+            raise ValueError(f"Cannot find `part_halo_match` at {iout}!")
+            
+
     def load_leaf(self, iout:int, galid:int, backup:dict=None, prefix="", level='debug')->'Leaf':
         if not galid in self.dict_leaves[iout].keys():
             @_debug
             def _load_leaf(self, iout:int, galid:int, backup:dict=None, prefix="", level='debug'):
-                snap = self.load_snap(iout, prefix=prefix)
-                if self.p.loadall:
-                    snap.get_part(nthread=self.p.ncpu)
-                    gals = self.load_gals(iout, galid='all')
-                    parts = snap.part[self.partstr]
-                    arg = np.argsort(np.abs(parts['id']))
-                    parts = parts[arg]
-                    for igal in gals:
-                        pind = np.where(self.part_halo_match[iout] == igal['id'])[0]
-                        part = parts[pind]
-                        self.dict_leaves[iout][igal['id']] = Leaf(self, igal, part, backup=backup)
-                    snap.clear()
+                if os.path.isfile(f"{self.p.resultdir}/{self.p.logprefix}_{iout}_leaf_{galid}.pkl"):
+                    leaf = pklload(f"{self.p.resultdir}/{self.p.logprefix}_{iout}_leaf_{galid}.pkl")
+                    if not leaf.contam:
+                        leaf.base = self
+                        leaf.logger = self.logger
+                        self.dict_leaves[iout][galid] = leaf
                 else:
-                    gal = self.load_gals(iout, galid, prefix=prefix)
-                    part = uhmi.HaloMaker.read_member_part(snap, galid, galaxy=self.p.galaxy, full_path=self.p.fullpath, usefortran=self.p.usefortran)
-                    self.dict_leaves[iout][galid]=Leaf(self, gal, part, backup=backup)
+                    snap = self.load_snap(iout, prefix=prefix)
+                    if self.p.loadall:
+                        snap.get_part(nthread=self.p.ncpu)
+                        gals = self.load_gals(iout, galid='all')
+                        parts = snap.part[self.partstr]
+                        arg = np.argsort(np.abs(parts['id']))
+                        parts = parts[arg]
+                        partmatch = self.read_part_halo_match(iout)
+                        for igal in gals:
+                            pind = np.where(partmatch == igal['id'])[0]
+                            part = parts[pind]
+                            ileaf = Leaf(self, igal, part, backup=backup)
+                            if not ileaf.contam:
+                                self.dict_leaves[iout][igal['id']] = Leaf(self, igal, part, backup=backup)
+                        snap.clear()
+                    else:
+                        gal = self.load_gals(iout, galid, prefix=prefix)
+                        part = uhmi.HaloMaker.read_member_part(snap, galid, galaxy=self.p.galaxy, full_path=self.p.fullpath, usefortran=self.p.usefortran)
+                        ileaf = Leaf(self, gal, part, backup=backup)
+                        if not ileaf.contam:
+                            self.dict_leaves[iout][galid]=Leaf(self, gal, part, backup=backup)
             _load_leaf(self, iout, galid, backup=backup, prefix=prefix, level=level)
+        self.memory = GB()
         return self.dict_leaves[iout][galid]
     
     @_debug
@@ -168,6 +199,29 @@ class TreeBase:
         if iout in keys:
             self.dict_gals[iout] = {}
             del self.dict_gals[iout]
+        
+        self.memory = GB()
+        if self.memory > self.p.flushGB:
+            keys = list(self.part_halo_match.keys())
+            for key in keys:
+                partmatch = self.part_halo_match[key]
+                if len(partmatch)>0:
+                    if not os.path.isfile(f"{self.p.resultdir}/{self.p.logprefix}_{iout}_partmatch.pkl"):
+                        pklsave(partmatch, f"{self.p.resultdir}/{self.p.logprefix}_{iout}_partmatch.pkl")
+                self.part_halo_match[key] = np.array([], dtype=int)
+            partmatch = None
+            gc.collect()
+        
+        self.memory = GB()
+        if self.memory > self.p.flushGB:
+            keys = list(self.dict_leaves[iout].keys())
+            for key in keys:
+                leaf = self.dict_leaves[iout][key]
+                pklsave(leaf, f"{self.p.resultdir}/{self.p.logprefix}_{iout}_leaf_{key}.pkl", overwrite=True)
+                self.dict_leaves[iout][key] = None
+            leaf = None
+            self.dict_leaves[iout] = {}
+            gc.collect()
 
         if leafclear:
             keys = list(self.dict_leaves.keys())
@@ -176,24 +230,21 @@ class TreeBase:
                 for key in keys2:
                     self.dict_leaves[iout][key].clear()
                     del self.dict_leaves[iout][key]
+                    if os.path.isfile(f"{self.p.resultdir}/{self.p.logprefix}_{iout}_leaf_{key}.pkl"):
+                        os.remove(partmatch, f"{self.p.resultdir}/{self.p.logprefix}_{iout}_leaf_{key}.pkl")
                 del self.dict_leaves[iout]
             
             keys = list(self.part_halo_match.keys())
             if iout in keys:
                 self.part_halo_match[iout] = np.array([])
                 del self.part_halo_match[iout]
+                if os.path.isfile(f"{self.p.resultdir}/{self.p.logprefix}_{iout}_partmatch.pkl"):
+                    os.remove(f"{self.p.resultdir}/{self.p.logprefix}_{iout}_partmatch.pkl")
         gc.collect()
+        self.memory = GB()
 
     def summary(self, isprint=False):
         gc.collect()
-        
-        temp = [f"{key}({sys.getsizeof(self.dict_snap[key].part_data) / 2**20:.2f} MB) | " for key in self.dict_snap.keys()]
-        tsnap = "".join(temp)
-
-        temp = []
-        for key in self.dict_gals.keys():
-            temp += f"\t{key}: {len(self.dict_gals[key])} {self.galstr}s\n"
-        tgm = "".join(temp)
 
         temp = []
         for key in self.dict_leaves.keys():
@@ -205,7 +256,8 @@ class TreeBase:
             temp += f"\t{key}: {len(self.part_halo_match[key])} matched parts\n"
         tmatch = "".join(temp)
         
-        text = f"\n[Tree Data Report]\n\n>>> Snapshot\n{tsnap}>>> {self.Galstr}\n{tgm}>>> Leaves\n{tleaf}>>> Matched particles\n{tmatch}\n>>> Used Memory: {psutil.Process().memory_info().rss / 2 ** 30:.4f} GB\n"
+        text = f"\n[Tree Data Report]\n\n>>> Leaves\n{tleaf}>>> Matched particles\n{tmatch}\n>>> Used Memory: {GB():.4f} GB\n"
+        self.memory = GB()
 
         if isprint:
             print(text)
@@ -424,43 +476,52 @@ class Leaf:
         self._name = f"L{self.id} at {self.iout}"
         self.base:TreeBase = base
         self.logger = base.logger
+        self.contam = False
+        try:
+            if self.cat['mcontam']/self.cat['m'] > self.p.fcontam:
+                self.contam = True
+            else:
+                pass
+        except:
+            pass
         
         # Mem part
-        if backup is not None:
-            self.nparts = backup['part']['nparts']
-            self.pid = backup['part']['id']
-            self.pvx = backup['part']['vx']
-            self.pvy = backup['part']['vy']
-            self.pvz = backup['part']['vz']
-            self.pweight = backup['part']['weight']
-        else:
-            self.nparts = len(parts['id'])
-            self.pid:np.ndarray[int] = np.abs(parts['id']) if self.base.p.galaxy else parts['id']
-            self.pvx:np.ndarray[float] = parts['vx', 'km/s']
-            self.pvy:np.ndarray[float] = parts['vy', 'km/s']
-            self.pvz:np.ndarray[float] = parts['vz', 'km/s']
-            dist = distance(gal, parts)
-            dist /= np.std(dist)
-            vels = distance3d(gal['vx'], gal['vy'], gal['vz'], self.pvx, self.pvy, self.pvz)
-            vels /= np.std(vels)
-            self.pweight:np.ndarray[float] = parts['m'] / np.sqrt(dist**2 + vels**2)
-            self.pweight /= np.sum(self.pweight)
+        if not self.contam:
+            if backup is not None:
+                self.nparts = backup['part']['nparts']
+                self.pid = backup['part']['id']
+                self.pvx = backup['part']['vx']
+                self.pvy = backup['part']['vy']
+                self.pvz = backup['part']['vz']
+                self.pweight = backup['part']['weight']
+            else:
+                self.nparts = len(parts['id'])
+                self.pid:np.ndarray[int] = np.abs(parts['id']) if self.base.p.galaxy else parts['id']
+                self.pvx:np.ndarray[float] = parts['vx', 'km/s']
+                self.pvy:np.ndarray[float] = parts['vy', 'km/s']
+                self.pvz:np.ndarray[float] = parts['vz', 'km/s']
+                dist = distance(gal, parts)
+                dist /= np.std(dist)
+                vels = distance3d(gal['vx'], gal['vy'], gal['vz'], self.pvx, self.pvy, self.pvz)
+                vels /= np.std(vels)
+                self.pweight:np.ndarray[float] = parts['m'] / np.sqrt(dist**2 + vels**2)
+                self.pweight /= np.sum(self.pweight)
 
-        # Progenitor & Descendant
-        if backup is not None:
-            self.prog = self.cat['prog']
-            self.prog_score = self.cat['prog_score']
-            self.desc = self.cat['desc']
-            self.desc_score = self.cat['desc_score']
-            self.saved_matchrate = backup['saved']['matchrate']
-            self.saved_veloffset = backup['saved']['veloffset']
-        else:
-            self.prog = None
-            self.desc = None
-            self.prog_score = None
-            self.desc_score = None
-            self.saved_matchrate = {}
-            self.saved_veloffset = {}
+            # Progenitor & Descendant
+            if backup is not None:
+                self.prog = self.cat['prog']
+                self.prog_score = self.cat['prog_score']
+                self.desc = self.cat['desc']
+                self.desc_score = self.cat['desc_score']
+                self.saved_matchrate = backup['saved']['matchrate']
+                self.saved_veloffset = backup['saved']['veloffset']
+            else:
+                self.prog = None
+                self.desc = None
+                self.prog_score = None
+                self.desc_score = None
+                self.saved_matchrate = {}
+                self.saved_veloffset = {}
     
     def name(self):
         return self._name
@@ -471,55 +532,58 @@ class Leaf:
     
     def clear(self):
         self.cat = None
-        self.nparts = 0
-        self.pid = None
-        self.pvx = None
-        self.pvy = None
-        self.pvz = None
-        self.pweight = None
-        self.saved_matchrate = {}
-        self.saved_veloffset = {}    
-        self.prog = []    
-        self.prog_score = []    
-        self.desc = []    
-        self.desc_score = []    
+        if not self.contam:
+            self.nparts = 0
+            self.pid = None
+            self.pvx = None
+            self.pvy = None
+            self.pvz = None
+            self.pweight = None
+            self.saved_matchrate = {}
+            self.saved_veloffset = {}    
+            self.prog = []    
+            self.prog_score = []    
+            self.desc = []    
+            self.desc_score = []    
 
     def selfsave(self) -> dict:
         # Save GalaxyMaker
-        backup_keys = ["nparts", "id", "timestep", "aexp", "m", "x", "y", "z", "vx", "vy", "vz", "r", "rvir", "mvir"]
-        lis = [ia for ia,ib in zip(self.cat, self.cat.dtype.names) if ib in backup_keys] + [self.prog] + [self.prog_score] + [self.desc] + [self.desc_score]
-        dtype = np.dtype([idtype for idtype in self.cat.dtype.descr if idtype[0] in backup_keys] + [('prog','O'), ("prog_score",  'O'), ('desc','O'), ("desc_score",  'O')])
-        arr = np.empty(1, dtype=dtype)[0]
-        for i, ilis in enumerate(lis):
-            arr[i] =  ilis
-        self.cat = arr
+        if not self.contam:
+            backup_keys = ["nparts", "id", "timestep", "aexp", "m", "x", "y", "z", "vx", "vy", "vz", "r", "rvir", "mvir"]
+            lis = [ia for ia,ib in zip(self.cat, self.cat.dtype.names) if ib in backup_keys] + [self.prog] + [self.prog_score] + [self.desc] + [self.desc_score]
+            dtype = np.dtype([idtype for idtype in self.cat.dtype.descr if idtype[0] in backup_keys] + [('prog','O'), ("prog_score",  'O'), ('desc','O'), ("desc_score",  'O')])
+            arr = np.empty(1, dtype=dtype)[0]
+            for i, ilis in enumerate(lis):
+                arr[i] =  ilis
+            self.cat = arr
 
-        backup = {}
-        backup['gal'] = self.cat
-        backup['part'] = {'nparts':self.nparts, 'id':self.pid, 'vx':self.pvx, 'vy':self.pvy, 'vz':self.pvz, 'weight':self.pweight}
-        backup['saved'] = {'matchrate':self.saved_matchrate, 'veloffset':self.saved_veloffset}
+            backup = {}
+            backup['gal'] = self.cat
+            backup['part'] = {'nparts':self.nparts, 'id':self.pid, 'vx':self.pvx, 'vy':self.pvy, 'vz':self.pvz, 'weight':self.pweight}
+            backup['saved'] = {'matchrate':self.saved_matchrate, 'veloffset':self.saved_veloffset}
 
-        return backup
+            return backup
 
     @_debug_leaf
     def calc_score(self, jout:int, otherleaves:list['Leaf'], prefix="", level='info'):
-        # for otherleaf in otherleaves:
-        leng = len(otherleaves)
-        ids = np.empty((leng,2), dtype=int)
-        scores = np.empty((leng,5), dtype=float)
-        for i in range(leng):
-            otherleaf = otherleaves[i]
-            if otherleaf.iout != jout:
-                raise ValueError(f"Calc score at {jout} but found <{otherleaf.name}>!")
-            score1, selfind = self.calc_matchrate(otherleaf, prefix=prefix)
-            score2, otherind = otherleaf.calc_matchrate(self, prefix=prefix)
-            score3 = self.calc_veloffset(otherleaf, selfind=selfind, otherind=otherind, prefix=prefix)
-            score4 = np.exp( -np.abs(np.log10(self.cat['m']/otherleaf.cat['m'])) ) 
-            scores_tot = score1 + score2 + score3 + score4
-            scores[i] = (scores_tot, score1, score2, score3, score4)
-            ids[i] = (jout, otherleaf.id)
-        arg = np.argsort(scores[:, 0])
-        return ids[arg][::-1], scores[arg][::-1]
+        if not self.contam:
+            # for otherleaf in otherleaves:
+            leng = len(otherleaves)
+            ids = np.empty((leng,2), dtype=int)
+            scores = np.empty((leng,5), dtype=float)
+            for i in range(leng):
+                otherleaf = otherleaves[i]
+                if otherleaf.iout != jout:
+                    raise ValueError(f"Calc score at {jout} but found <{otherleaf.name}>!")
+                score1, selfind = self.calc_matchrate(otherleaf, prefix=prefix)
+                score2, otherind = otherleaf.calc_matchrate(self, prefix=prefix)
+                score3 = self.calc_veloffset(otherleaf, selfind=selfind, otherind=otherind, prefix=prefix)
+                score4 = np.exp( -np.abs(np.log10(self.cat['m']/otherleaf.cat['m'])) ) 
+                scores_tot = score1 + score2 + score3 + score4
+                scores[i] = (scores_tot, score1, score2, score3, score4)
+                ids[i] = (jout, otherleaf.id)
+            arg = np.argsort(scores[:, 0])
+            return ids[arg][::-1], scores[arg][::-1]
 
     def calc_matchrate(self, otherleaf:'Leaf', prefix="", level='debug') -> float:
         calc = True

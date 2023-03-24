@@ -5,6 +5,7 @@ import yrun
 import yroot
 import time
 from numba import set_num_threads
+import gc
 
 # Read command
 print("$ python3 YoungTree.py params.py <ncpu>")
@@ -31,14 +32,19 @@ if __name__=='__main__':
                 reftime = time.time()
                 for iout in params.nout:
                     yrun.do_onestep(treebase, iout, reftot=reftime)
+                    if treebase.memory > treebase.p.flushGB:
+                        treebase.flush(iout)
 
                 outs = list(treebase.dict_leaves.keys())
                 for iout in outs:
                     treebase.flush(iout, leafclear="True")
                     treebase.reducebackup(iout)
+                treebase.mainlog.info(f"\n{treebase.summary()}\n")
                 
                 pklsave(np.array([]), f"{params.resultdir}/{params.logprefix}checkpoint.pickle")
                 treebase.mainlog.info("\nLeaf save Done\n"); print("\nLeaf save Done\n")
+                treebase = None
+                gc.collect()
 
             
             yrun.gather(params, mainlog)
