@@ -141,8 +141,8 @@ class TreeBase:
         if iout in self.part_halo_match.keys():
             if len(self.part_halo_match[iout])>0:
                 return self.part_halo_match[iout]
-            elif os.path.isfile(f"{self.p.resultdir}/{self.p.logprefix}_{iout}_partmatch.pkl"):
-                return pklload(f"{self.p.resultdir}/{self.p.logprefix}_{iout}_partmatch.pkl")
+            elif os.path.isfile(f"{self.p.resultdir}/{self.p.logprefix}{iout}_partmatch.pkl"):
+                return pklload(f"{self.p.resultdir}/{self.p.logprefix}{iout}_partmatch.pkl")
             else:
                 raise ValueError(f"Cannot find `part_halo_match` at {iout}!")
         else:
@@ -153,8 +153,9 @@ class TreeBase:
         if not galid in self.dict_leaves[iout].keys():
             @_debug
             def _load_leaf(self, iout:int, galid:int, backup:dict=None, prefix="", level='debug'):
-                if os.path.isfile(f"{self.p.resultdir}/{self.p.logprefix}_{iout}_leaf_{galid}.pkl"):
-                    leaf = pklload(f"{self.p.resultdir}/{self.p.logprefix}_{iout}_leaf_{galid}.pkl")
+                if os.path.isfile(f"{self.p.resultdir}/{self.p.logprefix}{iout}_leaf_{galid}.pkl"):
+                    backup = pklload(f"{self.p.resultdir}/{self.p.logprefix}{iout}_leaf_{galid}.pkl")
+                    leaf = Leaf(self, None, None, backup=backup)
                     if not leaf.contam:
                         leaf.base = self
                         leaf.logger = self.logger
@@ -206,8 +207,8 @@ class TreeBase:
             for key in keys:
                 partmatch = self.part_halo_match[key]
                 if len(partmatch)>0:
-                    if not os.path.isfile(f"{self.p.resultdir}/{self.p.logprefix}_{iout}_partmatch.pkl"):
-                        pklsave(partmatch, f"{self.p.resultdir}/{self.p.logprefix}_{iout}_partmatch.pkl")
+                    if not os.path.isfile(f"{self.p.resultdir}/{self.p.logprefix}{iout}_partmatch.pkl"):
+                        pklsave(partmatch, f"{self.p.resultdir}/{self.p.logprefix}{iout}_partmatch.pkl")
                 self.part_halo_match[key] = np.array([], dtype=int)
             partmatch = None
             gc.collect()
@@ -216,8 +217,9 @@ class TreeBase:
         if self.memory > self.p.flushGB:
             keys = list(self.dict_leaves[iout].keys())
             for key in keys:
-                leaf = self.dict_leaves[iout][key]
-                pklsave(leaf, f"{self.p.resultdir}/{self.p.logprefix}_{iout}_leaf_{key}.pkl", overwrite=True)
+                leaf:Leaf = self.dict_leaves[iout][key]
+                backup = leaf.selfsave()
+                pklsave(backup, f"{self.p.resultdir}/{self.p.logprefix}{iout}_leaf_{key}.pkl", overwrite=True)
                 self.dict_leaves[iout][key] = None
             leaf = None
             self.dict_leaves[iout] = {}
@@ -230,16 +232,16 @@ class TreeBase:
                 for key in keys2:
                     self.dict_leaves[iout][key].clear()
                     del self.dict_leaves[iout][key]
-                    if os.path.isfile(f"{self.p.resultdir}/{self.p.logprefix}_{iout}_leaf_{key}.pkl"):
-                        os.remove(partmatch, f"{self.p.resultdir}/{self.p.logprefix}_{iout}_leaf_{key}.pkl")
+                    if os.path.isfile(f"{self.p.resultdir}/{self.p.logprefix}{iout}_leaf_{key}.pkl"):
+                        os.remove(f"{self.p.resultdir}/{self.p.logprefix}{iout}_leaf_{key}.pkl")
                 del self.dict_leaves[iout]
             
             keys = list(self.part_halo_match.keys())
             if iout in keys:
                 self.part_halo_match[iout] = np.array([])
                 del self.part_halo_match[iout]
-                if os.path.isfile(f"{self.p.resultdir}/{self.p.logprefix}_{iout}_partmatch.pkl"):
-                    os.remove(f"{self.p.resultdir}/{self.p.logprefix}_{iout}_partmatch.pkl")
+                if os.path.isfile(f"{self.p.resultdir}/{self.p.logprefix}{iout}_partmatch.pkl"):
+                    os.remove(f"{self.p.resultdir}/{self.p.logprefix}{iout}_partmatch.pkl")
         gc.collect()
         self.memory = GB()
 
