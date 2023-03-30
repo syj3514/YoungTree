@@ -183,6 +183,9 @@ class TreeBase:
                         if not ileaf.contam:
                             self.dict_leaves[iout][galid]=Leaf(self, gal, part, backup=backup)
             _load_leaf(self, iout, galid, backup=backup, prefix=prefix, level=level)
+        else:
+            if self.dict_leaves[iout][galid] is None:
+                _load_leaf(self, iout, galid, backup=backup, prefix=prefix, level=level)
         self.memory = GB()
         return self.dict_leaves[iout][galid]
     
@@ -218,11 +221,14 @@ class TreeBase:
             keys = list(self.dict_leaves[iout].keys())
             for key in keys:
                 leaf:Leaf = self.dict_leaves[iout][key]
-                backup = leaf.selfsave()
-                pklsave(backup, f"{self.p.resultdir}/{self.p.logprefix}{iout}_leaf_{key}.pkl", overwrite=True)
+                if leaf is None:
+                    assert os.path.isfile(f"{self.p.resultdir}/{self.p.logprefix}{iout}_leaf_{key}.pkl")
+                    pass
+                else:
+                    backup = leaf.selfsave()
+                    pklsave(backup, f"{self.p.resultdir}/{self.p.logprefix}{iout}_leaf_{key}.pkl", overwrite=True)
                 self.dict_leaves[iout][key] = None
             leaf = None
-            self.dict_leaves[iout] = {}
             gc.collect()
 
         if leafclear:
@@ -285,11 +291,11 @@ class TreeBase:
         if iout is None:
             for iout in self.dict_leaves.keys():
                 for jkey in self.dict_leaves[iout].keys():
-                    jleaf:'Leaf' = self.dict_leaves[iout][jkey]
+                    jleaf = self.load_leaf(iout, jkey)
                     jleaf.logger = self.logger
         else:
             for jkey in self.dict_leaves[iout].keys():
-                jleaf:'Leaf' = self.dict_leaves[iout][jkey]
+                jleaf = self.load_leaf(iout, jkey)
                 jleaf.logger = self.logger
 
     @_debug
@@ -315,7 +321,7 @@ class TreeBase:
         jhalos = None
         # backups = {}
         for key in keys:
-            ileaf:Leaf = self.dict_leaves[iout][key]
+            ileaf:Leaf = self.load_leaf(iout, key, prefix=prefix, level=level)
             # Calc, or not?
             calc = True
             if(ileaf.prog is not None):
@@ -410,8 +416,9 @@ class TreeBase:
             else:
                 parthalomatch = self.part_halo_match[iout]
             for key in keys:
-                if self.dict_leaves[iout][key].changed:
-                    backups[key] = self.dict_leaves[iout][key].selfsave()
+                leaf = self.load_leaf(iout, key, prefix=prefix, level=level)
+                if leaf.changed:
+                    backups[key] = leaf.selfsave()
             pklsave((backups, parthalomatch), f"{self.p.resultdir}/{self.p.logprefix}{iout:05d}_temp.pickle", overwrite=True)
         del parthalomatch
         del backups
