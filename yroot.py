@@ -305,6 +305,8 @@ class TreeBase:
             backups, _ = pklload(f"{self.p.resultdir}/{self.p.logprefix}{iout:05d}_temp.pickle")
         self.load_snap(iout, prefix=prefix)
         self.load_gals(iout, galid='all', prefix=prefix)
+        if(backups is None):
+            self.mainlog.info(f"[Queue] {len(self.dict_gals[iout])} {self.galstr}s")
         for galid in self.dict_gals[iout]['id']:
             backup:dict = None
             if (backups is not None):
