@@ -311,6 +311,8 @@ class TreeBase:
             else:
                 try:
                     self.mainlog.info(f"[Queue] {howmany(gals['mcontam']/gals['m'] > self.p.fcontam)}/{len(gals)} {self.galstr}s at {iout}")
+                except:
+                    self.mainlog.info(f"[Queue] {len(gals)} {self.galstr}s at {iout}")
         for galid in self.dict_gals[iout]['id']:
             backup:dict = None
             if (backups is not None):
