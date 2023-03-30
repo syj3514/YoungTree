@@ -344,7 +344,7 @@ class TreeBase:
                 hosts = hosts[count/len(pid) > mcut]
                 if len(hosts)>0:
                     otherleaves = [self.load_leaf(jout, iid) for iid in hosts]
-                    ids, scores = ileaf.calc_score(jout, otherleaves, level='info') # CPU?
+                    ids, scores = ileaf.calc_score(jout, otherleaves, prefix=f"<{ileaf._name}>",level='info') # CPU?
                 else:
                     ids = np.array([[jout, 0]])
                     scores = np.array([[-10, -10, -10, -10, -10]])

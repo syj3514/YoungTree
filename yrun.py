@@ -64,6 +64,7 @@ def do_onestep(Tree, iout:int, reftot=time.time()):
             # Load snap gal part
             Tree.logger.info(f"\n\nStart at iout={iout}\n")
             Tree.load_from_backup(iout, level='info')
+            Tree.mainlog.info(f"[Queue] {len(Tree.dict_gals[iout])} {Tree.galstr}s")
             Tree.logger.info("\n")
             istep = Tree.out2step(iout)
             # Find progenitors
