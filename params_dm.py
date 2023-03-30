@@ -10,7 +10,7 @@
 #       "nh2":      NewHorizon2
 #       "nc":       NewCluster
 #       None
-mode = "y01605"
+mode = "y49096"
 
 #   [ncpu]
 #   Set nthread in numba
@@ -25,6 +25,7 @@ galaxy = False
 fullpath=None
 loadall = False
 usefortran = True
+fcontam = 0.5 # Ignore halos with contaminated greater than fcontam
 
 #   [nsnap]
 #   How many snapshots to use for each galaxy
@@ -51,8 +52,8 @@ onmem = False # Memory check
 oncpu = False # CPU check
 verbose = 2
 
-#   [flush_GB]
+#   [flushGB]
 #   Memory threshold for auto-flush in Gigabytes
-flushGB = 200
+flushGB = 80
 
 
