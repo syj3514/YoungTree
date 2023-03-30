@@ -149,39 +149,40 @@ class TreeBase:
             raise ValueError(f"Cannot find `part_halo_match` at {iout}!")
             
 
+    @_debug
+    def _load_leaf(self, iout:int, galid:int, backup:dict=None, prefix="", level='debug'):
+        if os.path.isfile(f"{self.p.resultdir}/{self.p.logprefix}{iout}_leaf_{galid}.pkl"):
+            backup = pklload(f"{self.p.resultdir}/{self.p.logprefix}{iout}_leaf_{galid}.pkl")
+            leaf = Leaf(self, None, None, backup=backup)
+            if not leaf.contam:
+                leaf.base = self
+                leaf.logger = self.logger
+                self.dict_leaves[iout][galid] = leaf
+        else:
+            snap = self.load_snap(iout, prefix=prefix)
+            if self.p.loadall:
+                snap.get_part(nthread=self.p.ncpu)
+                gals = self.load_gals(iout, galid='all')
+                parts = snap.part[self.partstr]
+                arg = np.argsort(np.abs(parts['id']))
+                parts = parts[arg]
+                partmatch = self.read_part_halo_match(iout)
+                for igal in gals:
+                    pind = np.where(partmatch == igal['id'])[0]
+                    part = parts[pind]
+                    ileaf = Leaf(self, igal, part, backup=backup)
+                    if not ileaf.contam:
+                        self.dict_leaves[iout][igal['id']] = Leaf(self, igal, part, backup=backup)
+                snap.clear()
+            else:
+                gal = self.load_gals(iout, galid, prefix=prefix)
+                part = uhmi.HaloMaker.read_member_part(snap, galid, galaxy=self.p.galaxy, full_path=self.p.fullpath, usefortran=self.p.usefortran)
+                ileaf = Leaf(self, gal, part, backup=backup)
+                if not ileaf.contam:
+                    self.dict_leaves[iout][galid]=Leaf(self, gal, part, backup=backup)
+
     def load_leaf(self, iout:int, galid:int, backup:dict=None, prefix="", level='debug')->'Leaf':
         if not galid in self.dict_leaves[iout].keys():
-            @_debug
-            def _load_leaf(self, iout:int, galid:int, backup:dict=None, prefix="", level='debug'):
-                if os.path.isfile(f"{self.p.resultdir}/{self.p.logprefix}{iout}_leaf_{galid}.pkl"):
-                    backup = pklload(f"{self.p.resultdir}/{self.p.logprefix}{iout}_leaf_{galid}.pkl")
-                    leaf = Leaf(self, None, None, backup=backup)
-                    if not leaf.contam:
-                        leaf.base = self
-                        leaf.logger = self.logger
-                        self.dict_leaves[iout][galid] = leaf
-                else:
-                    snap = self.load_snap(iout, prefix=prefix)
-                    if self.p.loadall:
-                        snap.get_part(nthread=self.p.ncpu)
-                        gals = self.load_gals(iout, galid='all')
-                        parts = snap.part[self.partstr]
-                        arg = np.argsort(np.abs(parts['id']))
-                        parts = parts[arg]
-                        partmatch = self.read_part_halo_match(iout)
-                        for igal in gals:
-                            pind = np.where(partmatch == igal['id'])[0]
-                            part = parts[pind]
-                            ileaf = Leaf(self, igal, part, backup=backup)
-                            if not ileaf.contam:
-                                self.dict_leaves[iout][igal['id']] = Leaf(self, igal, part, backup=backup)
-                        snap.clear()
-                    else:
-                        gal = self.load_gals(iout, galid, prefix=prefix)
-                        part = uhmi.HaloMaker.read_member_part(snap, galid, galaxy=self.p.galaxy, full_path=self.p.fullpath, usefortran=self.p.usefortran)
-                        ileaf = Leaf(self, gal, part, backup=backup)
-                        if not ileaf.contam:
-                            self.dict_leaves[iout][galid]=Leaf(self, gal, part, backup=backup)
             _load_leaf(self, iout, galid, backup=backup, prefix=prefix, level=level)
         else:
             if self.dict_leaves[iout][galid] is None:
@@ -310,7 +311,7 @@ class TreeBase:
                 self.mainlog.info(f"[Queue] {len(gals)} {self.galstr}s at {iout}")
             else:
                 try:
-                    self.mainlog.info(f"[Queue] {howmany(gals['mcontam']/gals['m'] > self.p.fcontam, True)}/{len(gals)} {self.galstr}s at {iout}")
+                    self.mainlog.info(f"[Queue] {howmany(gals['mcontam']/gals['m'] < self.p.fcontam, True)}/{len(gals)} {self.galstr}s at {iout}")
                 except:
                     self.mainlog.info(f"[Queue] {len(gals)} {self.galstr}s at {iout}")
         for galid in self.dict_gals[iout]['id']:
