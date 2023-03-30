@@ -304,9 +304,13 @@ class TreeBase:
         if os.path.isfile(f"{self.p.resultdir}/{self.p.logprefix}{iout:05d}_temp.pickle"):
             backups, _ = pklload(f"{self.p.resultdir}/{self.p.logprefix}{iout:05d}_temp.pickle")
         self.load_snap(iout, prefix=prefix)
-        self.load_gals(iout, galid='all', prefix=prefix)
+        gals = self.load_gals(iout, galid='all', prefix=prefix)
         if(backups is None):
-            self.mainlog.info(f"[Queue] {len(self.dict_gals[iout])} {self.galstr}s at {iout}")
+            if(self.p.galaxy):
+                self.mainlog.info(f"[Queue] {len(gals)} {self.galstr}s at {iout}")
+            else:
+                try:
+                    self.mainlog.info(f"[Queue] {howmany(gals['mcontam']/gals['m'] > self.p.fcontam)}/{len(gals)} {self.galstr}s at {iout}")
         for galid in self.dict_gals[iout]['id']:
             backup:dict = None
             if (backups is not None):
