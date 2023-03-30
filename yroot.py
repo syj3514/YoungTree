@@ -183,10 +183,10 @@ class TreeBase:
 
     def load_leaf(self, iout:int, galid:int, backup:dict=None, prefix="", level='debug')->'Leaf':
         if not galid in self.dict_leaves[iout].keys():
-            _load_leaf(self, iout, galid, backup=backup, prefix=prefix, level=level)
+            self._load_leaf(iout, galid, backup=backup, prefix=prefix, level=level)
         else:
             if self.dict_leaves[iout][galid] is None:
-                _load_leaf(self, iout, galid, backup=backup, prefix=prefix, level=level)
+                self._load_leaf(iout, galid, backup=backup, prefix=prefix, level=level)
         self.memory = GB()
         return self.dict_leaves[iout][galid]
     
