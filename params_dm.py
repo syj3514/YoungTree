@@ -10,7 +10,7 @@
 #       "nh2":      NewHorizon2
 #       "nc":       NewCluster
 #       None
-mode = "y49096"
+mode = "y10002"
 
 #   [ncpu]
 #   Set nthread in numba
@@ -24,7 +24,7 @@ ncpu = 24
 galaxy = False
 fullpath=None
 loadall = False
-usefortran = True
+usefortran = False
 fcontam = 0.5 # Ignore halos with contaminated greater than fcontam
 
 #   [nsnap]

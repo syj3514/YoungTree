@@ -13,12 +13,15 @@ from numpy.lib.recfunctions import append_fields
 # Main run
 ####################################################################################################################
 def treerecord(iout:int, nout:int, elapse_s:float, total_elapse_s:float, logger:logging.Logger):
-    a = f"{iout} done ({elapse_s/60:.2f} min elapsed)"
+    key, conv = timeconv(elapse_s)
+    a = f"{iout} done ({conv:.2f} {key} elapsed)"
     logger.info(a)
-    aver = total_elapse_s/60/len(nout[nout>=iout])
-    a = f"{len(nout[nout>=iout])}/{len(nout)} done ({aver:.2f} min/snap)"
+    aver = total_elapse_s/len(nout[nout>=iout])
+    key, conv = timeconv(aver)
+    a = f"{len(nout[nout>=iout])}/{len(nout)} done ({conv:.2f} {key}/snap)"
     logger.info(a)
-    a = f"{aver*len(nout[nout<iout]):.2f} min forecast"
+    key, conv = timeconv(aver*len(nout[nout<iout]))
+    a = f"{conv:.2f} {key} forecast"
     logger.info(a)
     a = f"{psutil.Process().memory_info().rss / 2 ** 30:.4f} GB used\n" # memory used
     logger.info(a)

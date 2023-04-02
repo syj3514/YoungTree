@@ -237,7 +237,7 @@ class TreeBase:
             if iout in keys:
                 keys2 = list(self.dict_leaves[iout].keys())
                 for key in keys2:
-                    self.dict_leaves[iout][key].clear()
+                    if(self.dict_leaves[iout][key] is not None):self.dict_leaves[iout][key].clear()
                     del self.dict_leaves[iout][key]
                     if os.path.isfile(f"{self.p.resultdir}/{self.p.logprefix}{iout}_leaf_{key}.pkl"):
                         os.remove(f"{self.p.resultdir}/{self.p.logprefix}{iout}_leaf_{key}.pkl")
