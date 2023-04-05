@@ -11,6 +11,7 @@ import sys
 import gc
 from ytool import *
 from yrun import *
+import concurrent.futures
 
 def _debug(func):
     @functools.wraps(func)
@@ -325,11 +326,105 @@ class TreeBase:
         backup = None; del backup
 
     @_debug
+    def _find_cand(self, key:int, iout:int, jout:int, calc:bool, jhalos, mcut, prefix="", level='info'):
+        ileaf = self.load_leaf(iout, key)
+        if calc:
+            if jhalos is None:
+                try:
+                    jhalos = self.part_halo_match[jout]
+                except:
+                    _, jhalos = pklload(f"{self.p.resultdir}/{self.p.logprefix}{jout:05d}_temp.pickle")
+            pid = ileaf.pid
+            pid = pid[pid <= len(jhalos)]
+            hosts = jhalos[pid-1]
+            hosts = hosts[hosts>0]
+            hosts, count = np.unique(hosts, return_counts=True) # CPU?
+            hosts = hosts[count/len(pid) > mcut]
+            if len(hosts)>0:
+                otherleaves = [self.load_leaf(jout, iid) for iid in hosts]
+                ids, scores = ileaf.calc_score(jout, otherleaves, prefix=f"<{ileaf._name}>",level='info') # CPU?
+            else:
+                ids = np.array([[jout, 0]])
+                scores = np.array([[-10, -10, -10, -10, -10]])
+            if jout<iout:
+                ileaf.prog = ids if ileaf.prog is None else np.vstack((ileaf.prog, ids))
+                ileaf.prog_score = scores if ileaf.prog_score is None else np.vstack((ileaf.prog_score, scores))
+                ileaf.changed = True
+            elif jout>iout:
+                ileaf.desc = ids if ileaf.desc is None else np.vstack((ileaf.desc, ids))
+                ileaf.desc_score = scores if ileaf.desc_score is None else np.vstack((ileaf.desc_score, scores))
+                ileaf.changed = True
+            else:
+                raise ValueError(f"Same output {iout} and {jout}!")
+        # No need to calculation
+        else:
+            if jout<iout:
+                arg = ileaf.prog[:,0]==jout
+                ids = ileaf.prog[arg]
+                scores = ileaf.prog_score[arg]
+            elif jout>iout:
+                arg = ileaf.desc[:,0]==jout
+                ids = ileaf.desc[arg]
+                scores = ileaf.desc_score[arg]
+            else:
+                raise ValueError(f"Same output {iout} and {jout}!")
+        self._find_cand_msg(ileaf._name, ids, scores)
+        # return ileaf._name, ids, scores
+    @staticmethod
+    def tempfunc(key, self=None, iout=None, jout=None, jhalos=None, mcut=None):
+        ileaf = self.load_leaf(iout, key)
+            
+        if jhalos is None:
+            try:
+                jhalos = self.part_halo_match[jout]
+            except:
+                _, jhalos = pklload(f"{self.p.resultdir}/{self.p.logprefix}{jout:05d}_temp.pickle")
+        pid = ileaf.pid
+        pid = pid[pid <= len(jhalos)]
+        hosts = jhalos[pid-1]
+        hosts = hosts[hosts>0]
+        hosts, count = np.unique(hosts, return_counts=True) # CPU?
+        hosts = hosts[count/len(pid) > mcut]
+        if len(hosts)>0:
+            otherleaves = [self.load_leaf(jout, iid) for iid in hosts]
+            ids, scores = ileaf.calc_score(jout, otherleaves, prefix=f"<{ileaf._name}>",level='info') # CPU?
+        else:
+            ids = np.array([[jout, 0]])
+            scores = np.array([[-10, -10, -10, -10, -10]])
+        if jout<iout:
+            ileaf.prog = ids if ileaf.prog is None else np.vstack((ileaf.prog, ids))
+            ileaf.prog_score = scores if ileaf.prog_score is None else np.vstack((ileaf.prog_score, scores))
+            ileaf.changed = True
+        elif jout>iout:
+            ileaf.desc = ids if ileaf.desc is None else np.vstack((ileaf.desc, ids))
+            ileaf.desc_score = scores if ileaf.desc_score is None else np.vstack((ileaf.desc_score, scores))
+            ileaf.changed = True
+        else:
+            raise ValueError(f"Same output {iout} and {jout}!")
+
+        self._find_cand_msg(ileaf._name, ids, scores)
+        return ileaf._name
+
+    def _find_cand_msg(self, ileafname:str, ids:np.ndarray, scores:np.ndarray, prefix=""):
+        # Debugging message
+        msg = f"{prefix}<{ileafname}> has {len(ids)} candidates"
+        if len(ids)>0:
+            if np.sum(scores[0])>0:
+                if len(ids) < 6:
+                    msg = f"{msg} {[f'{ids[i][-1]}({scores[i][0]:.3f})' for i in range(len(ids))]}"
+                else:
+                    msg = f"{msg} {[f'{ids[i][-1]}({scores[i][0]:.3f})' for i in range(5)]+['...']}"
+            else:
+                msg = f"{prefix}<{ileafname}> has {len(ids)-1} candidates"
+        print(msg)
+        self.logger.info(msg)
+
+    @_debug
     def find_cands(self, iout:int, jout:int, mcut=0.01, prefix="", level='info'):
         keys = list(self.dict_leaves[iout].keys())
         jhalos = None
-        # backups = {}
-        for key in keys:
+        calcs = np.full(len(keys), False, dtype=bool)
+        for i, key in enumerate(keys):
             ileaf:Leaf = self.load_leaf(iout, key, prefix=prefix, level=level)
             # Calc, or not?
             calc = True
@@ -337,61 +432,33 @@ class TreeBase:
                 if(jout in ileaf.prog[:,0]): calc=False
             if(ileaf.desc is not None):
                 if(jout in ileaf.desc[:,0]): calc=False
+            if(calc): calcs[i] = True
+        if True in calcs:
+            try:
+                jhalos = self.part_halo_match[jout]
+            except:
+                _, jhalos = pklload(f"{self.p.resultdir}/{self.p.logprefix}{jout:05d}_temp.pickle")
 
-            # Main calculation
-            if calc:
-                if jhalos is None:
-                    try:
-                        jhalos = self.part_halo_match[jout]
-                    except:
-                        _, jhalos = pklload(f"{self.p.resultdir}/{self.p.logprefix}{jout:05d}_temp.pickle")
-                pid = ileaf.pid
-                pid = pid[pid <= len(jhalos)]
-                hosts = jhalos[pid-1]
-                hosts = hosts[hosts>0]
-                hosts, count = np.unique(hosts, return_counts=True) # CPU?
-                hosts = hosts[count/len(pid) > mcut]
-                if len(hosts)>0:
-                    otherleaves = [self.load_leaf(jout, iid) for iid in hosts]
-                    ids, scores = ileaf.calc_score(jout, otherleaves, prefix=f"<{ileaf._name}>",level='info') # CPU?
-                else:
-                    ids = np.array([[jout, 0]])
-                    scores = np.array([[-10, -10, -10, -10, -10]])
-                if jout<iout:
-                    ileaf.prog = ids if ileaf.prog is None else np.vstack((ileaf.prog, ids))
-                    ileaf.prog_score = scores if ileaf.prog_score is None else np.vstack((ileaf.prog_score, scores))
-                    ileaf.changed = True
-                elif jout>iout:
-                    ileaf.desc = ids if ileaf.desc is None else np.vstack((ileaf.desc, ids))
-                    ileaf.desc_score = scores if ileaf.desc_score is None else np.vstack((ileaf.desc_score, scores))
-                    ileaf.changed = True
-                else:
-                    raise ValueError(f"Same output {iout} and {jout}!")
-            
-            # No need to calculation
-            else:
-                if jout<iout:
-                    arg = ileaf.prog[:,0]==jout
-                    ids = ileaf.prog[arg]
-                    scores = ileaf.prog_score[arg]
-                elif jout>iout:
-                    arg = ileaf.desc[:,0]==jout
-                    ids = ileaf.desc[arg]
-                    scores = ileaf.desc_score[arg]
-                else:
-                    raise ValueError(f"Same output {iout} and {jout}!")
-                
-            # Debugging message
-            msg = f"{prefix}<{ileaf.name()}> has {len(ids)} candidates"
-            if len(ids)>0:
-                if np.sum(scores[0])>0:
-                    if len(ids) < 6:
-                        msg = f"{msg} {[f'{ids[i][-1]}({scores[i][0]:.3f})' for i in range(len(ids))]}"
-                    else:
-                        msg = f"{msg} {[f'{ids[i][-1]}({scores[i][0]:.3f})' for i in range(5)]+['...']}"
-                else:
-                    msg = f"{prefix}<{ileaf.name()}> has {len(ids)-1} candidates"
-            self.logger.debug(msg)
+        self._find_cand_para(np.asarray(keys), calcs, iout, jout, jhalos, mcut, prefix=prefix, level=level)
+        # results = self._find_cand_para(keys, calcs, iout, jout, jhalos, mcut)
+        # for iname, iids, iscores in results:
+        #     self._find_cand_msg(iname, iids, iscores)
+    
+    @_debug
+    def _find_cand_para(self, keys, calcs, iout, jout, jhalos, mcut, prefix="", level="info"):
+        from functools import partial
+        n_workers = min( self.p.ncpu, len(keys) )
+        func = partial(self.tempfunc, self=self, iout=iout, jout=jout, jhalos=jhalos, mcut=mcut)
+        with concurrent.futures.ProcessPoolExecutor(max_workers=n_workers) as executor:
+            # futures = [executor.submit(self._find_cand, key, iout, jout, calc, jhalos, mcut) for key,calc in zip(keys, calcs)]
+            futures = executor.map(func, keys[calcs])
+            for fu in futures:
+                self.logger.info(f"{fu}")
+            # concurrent.futures.wait(futures)
+            # [future.result() for future in concurrent.futures.as_completed(futures)]
+
+        # return results
+                    
 
     @_debug
     def reducebackup(self, iout:int, prefix="", level='info'):
