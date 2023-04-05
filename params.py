@@ -16,6 +16,7 @@ mode = "y36415"
 #   Set nthread in numba
 #   If ncpu <=0, skip
 ncpu = 24
+nice = 0
 
 #   [galaxy]
 #   Type of data

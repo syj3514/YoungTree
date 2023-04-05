@@ -15,6 +15,7 @@ assert len(args)>=2
 if __name__=='__main__':
     # Read params
     params = make_params_dict(args[1])
+    if(os.params.nice>0): os.nice(os.params.nice)
     mainlog, resultdir = yrun.make_log(params.repo, "main", detail=params.detail, prefix=params.logprefix)
     params.resultdir = resultdir
     mainlog.info(f"\nAllow {params.flushGB:.2f} GB Memory\n"); print(f"\nAllow {params.flushGB:.2f} GB Memory\n")
