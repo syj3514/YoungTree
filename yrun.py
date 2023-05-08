@@ -13,6 +13,16 @@ from numpy.lib.recfunctions import append_fields
 # Main run
 ####################################################################################################################
 def treerecord(iout:int, nout:int, elapse_s:float, total_elapse_s:float, logger:logging.Logger):
+    '''
+    Current status report on logger  
+    
+    Example
+    -------
+    180 done (4.84 min elapsed)\n
+    8/187 done (5.64 min/snap)\n
+    1.24 hr forecast\n
+    43.53 GB used\n
+    '''
     key, conv = timeconv(elapse_s)
     a = f"{iout} done ({conv:.2f} {key} elapsed)"
     logger.info(a)
@@ -25,34 +35,40 @@ def treerecord(iout:int, nout:int, elapse_s:float, total_elapse_s:float, logger:
     logger.info(a)
     a = f"{psutil.Process().memory_info().rss / 2 ** 30:.4f} GB used\n" # memory used
     logger.info(a)
-
-def do_onestep(Tree, iout:int, reftot=time.time()):
+    
+# from yroot import TreeBase # Remove this when running!
+def do_onestep(Tree:'TreeBase', iout:int, reftot:float=time.time()):
     nout = Tree.p.nout
     nstep = Tree.p.nstep
     resultdir = Tree.p.resultdir
     set_num_threads(Tree.p.ncpu)
-
     try:
         ref = time.time()
         skip = False
+        istep = Tree.out2step(iout)
         
         # Fully saved
-        if os.path.isfile(f"{resultdir}/{Tree.p.logprefix}{iout:05d}.pickle"):
+        if os.path.isfile(f"{resultdir}/by-product/{Tree.p.logprefix}{iout:05d}.pickle"):
             Tree.mainlog.info(f"[Queue] {iout} is done --> Skip\n")
             skip=True
         
+        
         # Temp exists
-        if os.path.isfile(f"{resultdir}/{Tree.p.logprefix}{iout:05d}_temp.pickle"):
-            Tree.mainlog.info(f"[Queue] `{resultdir}/{Tree.p.logprefix}{iout:05d}_temp.pickle` is found")
-            istep = Tree.out2step(iout)
-            cutstep = istep+5
+        if os.path.isfile(f"{resultdir}/by-product/{Tree.p.logprefix}{iout:05d}_temp.pickle"):
+            Tree.mainlog.info(f"[Queue] `{resultdir}/by-product/{Tree.p.logprefix}{iout:05d}_temp.pickle` is found")
+            cutstep = istep+Tree.p.nsnap
             if cutstep <= np.max(nstep):
                 cutout = Tree.step2out(cutstep)
-                if os.path.isfile(f"{resultdir}/{Tree.p.logprefix}{cutout:05d}_temp.pickle"):
-                    Tree.mainlog.info(f"[Queue] `{resultdir}/{Tree.p.logprefix}{cutout:05d}_temp.pickle` is found --> Do\n")
+                if os.path.isfile(f"{resultdir}/by-product/{Tree.p.logprefix}{cutout:05d}_temp.pickle"):
+                    # For example,
+                    # there is a file `ytree_00100_temp.pickle` and not `ytree_00105_temp.pickle`
+                    # It means the all calculation in 100th snap are finished
+                    # However, the temp is still needed for the next 5 snaps
+                    # In this case, we don't have to calculate 100th snap again
+                    Tree.mainlog.info(f"[Queue] `{resultdir}/by-product/{Tree.p.logprefix}{cutout:05d}_temp.pickle` is found --> Do\n")
                     skip=False
                 else:
-                    Tree.mainlog.info(f"[Queue] `{resultdir}/{Tree.p.logprefix}{cutout:05d}_temp.pickle` is not found --> Skip\n")
+                    Tree.mainlog.info(f"[Queue] `{resultdir}/by-product/{Tree.p.logprefix}{cutout:05d}_temp.pickle` is not found --> Skip\n")
                     skip=True
             else:
                 skip=False
@@ -60,24 +76,27 @@ def do_onestep(Tree, iout:int, reftot=time.time()):
         # Main process
         if not skip:
             # New log file
-            Tree.mainlog.info(f"[Queue] {iout} start\n")
-            Tree.logger, _ = make_log(Tree.p.repo, f"{iout:05d}", detail=Tree.p.detail, prefix=Tree.p.logprefix)
+            Tree.mainlog.info(f"[Queue] {iout} start")
+            Tree.logger, _, newlog = make_log(Tree.p.repo, f"{iout:05d}", detail=Tree.p.detail, prefix=Tree.p.logprefix, path_in_repo="YoungTree/log")
+            Tree.mainlog.info(f"See `{newlog}`\n")
             Tree.update_debugger()
             Tree.logger.info(f"\n{Tree.summary()}\n")
+            
             # Load snap gal part
             Tree.logger.info(f"\n\nStart at iout={iout}\n")
-            Tree.load_from_backup(iout, level='info')
+            Tree.leaf_read(iout, level='info')
             Tree.logger.info("\n")
-            istep = Tree.out2step(iout)
+            
             # Find progenitors
             for j in range(Tree.p.nsnap):
                 jstep = istep-j-1
                 if jstep > 0:
                     jout = Tree.step2out(jstep)
                     Tree.logger.info(f"\n\nProgenitor at jout={jout}\n")
-                    Tree.load_from_backup(jout, level='info')
+                    Tree.leaf_read(jout, level='info')
                     Tree.logger.info("\n")
                     Tree.find_cands(iout, jout, level='info')
+            
             # Find descendants
             for j in range(Tree.p.nsnap):
                 jstep = istep+j+1
@@ -85,10 +104,11 @@ def do_onestep(Tree, iout:int, reftot=time.time()):
                     jout = Tree.step2out(jstep)
                     if not jout in Tree.dict_snap.keys():
                         Tree.logger.info(f"\n\nDescendant at jout={jout}\n")
-                        Tree.load_from_backup(jout, level='info')
+                        Tree.leaf_read(jout, level='info')
                         Tree.logger.info("\n")
                         Tree.find_cands(iout, jout, level='info')
             Tree.logger.info(f"\n\n")
+            
             # Flush redundant snapshots
             cutstep = istep+5
             if cutstep<=np.max(nstep):
@@ -97,21 +117,29 @@ def do_onestep(Tree, iout:int, reftot=time.time()):
                 for out in outs:
                     if out > cutout:
                         Tree.flush(out, leafclear=True, level='info')        
-                        # reducebackup(Tree, out, resultdir=resultdir)
-                        Tree.reducebackup(out, level='info')
+                        Tree.finalize(out, level='info')
+            
             # Backup files
-            Tree.leaf_backup(level='info')
+            Tree.leaf_write(level='info')
             Tree.logger.info(f"\n{Tree.summary()}\n")
             treerecord(iout, nout, time.time()-ref, time.time()-reftot, Tree.mainlog)
     except Exception as e:
-        print(traceback.format_exc())
-        print(e)
-        Tree.logger.error(traceback.format_exc())
-        Tree.logger.error(e)
+        print(); Tree.logger.error("")
+        print(traceback.format_exc()); Tree.logger.error(traceback.format_exc())
+        print(e); Tree.logger.error(e)
         Tree.logger.error(Tree.summary())
-        print("Iteration is terminated")
+        print("\nIteration is terminated\n"); Tree.logger.error("\nIteration is terminated\n")
         os._exit(1)
+        
 
+
+
+
+
+
+
+
+# @debugf(ontime=True, onmem=True, oncpu=True)
 def gather(p:DotDict, logger:logging.Logger):
     go=True
     if os.path.isfile(f"{p.resultdir}/{p.logprefix}all.pickle"):
@@ -120,7 +148,7 @@ def gather(p:DotDict, logger:logging.Logger):
     if go:
         logger.info("Gather all files...")
         for i, iout in enumerate(p.nout):
-            file = pklload(f"{p.resultdir}/{p.logprefix}{iout:05d}.pickle")
+            file = pklload(f"{p.resultdir}/by-product/{p.logprefix}{iout:05d}.pickle")
             if i==0:
                 gals = file
             else:
@@ -153,6 +181,9 @@ def gather(p:DotDict, logger:logging.Logger):
         logger.info(f"`{p.resultdir}/{p.logprefix}all.pickle` saved\n")
     # gals = pklload(f"{p.resultdir}/{p.logprefix}all.pickle")
 
+
+
+# @debugf(ontime=True, onmem=True, oncpu=True)
 def connect(p:DotDict, logger:logging.Logger):
     gals = pklload(f"{p.resultdir}/{p.logprefix}all.pickle")
     go=True
@@ -174,67 +205,93 @@ def connect(p:DotDict, logger:logging.Logger):
         logger.info("Find son & father...")
         offsets = np.array([1,2,3,4,5])
         for offset in offsets:
-            logger.info(f"\n{offset}\n")
+            logger.info(f"\n\n  OFFSET={offset}\n")
             iterobj = p.nout
             for iout in iterobj:
-                temp = inst[iout]
-                do = np.ones(len(temp), dtype=bool)
-                for ihalo in temp:
-                    if ihalo['son']<=0:
-                        iid = gal2id(ihalo)
-                        do[ihalo['id']-1] = False
-                        idesc, idscore = maxdesc(ihalo, all=False, offset=offset)
-                        if idesc==0:
-                            logger.debug(f"\t{iid} No desc")
-                            pass
-                        else:
-                            dhalo = gethalo(idesc//100000, idesc%100000, halos=inst)
-                            prog, pscore = maxprog(dhalo, all=False, offset=offset)
-                            if prog==iid: # each other
-                                nrival = 0
-                                for jhalo, ido in zip(temp, do):
-                                    if (idesc in jhalo['desc'])&(jhalo['son']<=0)&(ido):
-                                        jid = gal2id(jhalo)
-                                        if jid != iid:
-                                            jdesc, jdscore = maxdesc(jhalo, all=False, offset=offset)
-                                            if jdesc==idesc:
-                                                do[jhalo['id']-1] = False
-                                                nrival += 1
-                                                if jhalo['son'] == 0:
-                                                    logger.debug(f"\t\trival {jid} newly have son {-idesc} ({jdscore:.4f})")
-                                                    jhalo['son'] = -idesc
-                                                    jhalo['son_score'] = jdscore
-                                                elif jhalo['son'] < 0:
-                                                    if jhalo['son_score'] > jdscore:
-                                                        logger.debug(f"\t\trival {jid} keep original son {jhalo['son']} ({jhalo['son_score']:.4f}) rather than {-idesc} ({jdscore:.4f})")
-                                                    else:
-                                                        logger.debug(f"\t\trival {jid} change original son {jhalo['son']} ({jhalo['son_score']:.4f}) to {-idesc} ({jdscore:.4f})")
-                                                        jhalo['son'] = -jdesc
-                                                        jhalo['son_score'] = jdscore
-                                                else:
-                                                    logger.debug(f"\t\trival {jid} keep original son {jhalo['son']} ({jhalo['son_score']:.4f}) rather than {-idesc} ({jdscore:.4f})")
-                                # if nrival==0:
-                                if ihalo['son'] == 0:
-                                    logger.debug(f"\t{iid} change original son {ihalo['son']} ({ihalo['son_score']:.4f}) to {idesc} ({idscore:.4f})")
-                                    ihalo['son'] = idesc
-                                    ihalo['son_score'] = idscore
-                                else:
-                                    if ihalo['son_score'] > idscore:
-                                        logger.debug(f"\t {iid} keep original son {ihalo['son']} ({ihalo['son_score']:.4f}) rather than {idesc} ({idscore:.4f})")
-                                    else:
-                                        logger.debug(f"\t{iid} change original son {ihalo['son']} ({ihalo['son_score']:.4f}) to {idesc} ({idscore:.4f})")
-                                        ihalo['son'] = idesc
-                                        ihalo['son_score'] = idscore
-                                if dhalo['fat'] == 0:
-                                    logger.debug(f"\tAlso, son {idesc} have father {iid} with {pscore:.4f}")
-                                    dhalo['fat'] = iid
-                                    dhalo['fat_score'] = pscore
-                                else:
-                                    pass
+                dstep = out2step(iout, p.nout, p.nstep)+offset
+                if dstep in p.nstep:
+                    igals = inst[iout]
+                    do = np.ones(len(igals), dtype=bool)
+                    for ihalo_iout in igals:
+                        do[ihalo_iout['id']-1] = False
+                        if ihalo_iout['son']<=0:
+                            iid = gal2id(ihalo_iout)
+                            idesc, idscore = maxdesc(ihalo_iout, all=False, offset=offset, nout=p.nout, nstep=p.nstep)
+                            if idesc==0:
+                                logger.debug(f"\t{iid} No desc")
+                                pass
                             else:
-                                logger.debug(f"\thave desc {idesc}, but his prog is {prog}")
-                    else:
-                        do[ihalo['id']-1] = False
+                                dhalo = gethalo(idesc//100000, idesc%100000, halos=inst) # desc of ihalo_iout
+                                prog, pscore = maxprog(dhalo, all=False, offset=offset, nout=p.nout, nstep=p.nstep)  # prog of desc of ihalo_iout
+                                # Choose each other (prog <-> desc)
+                                if prog==iid:
+                                    nrival = 0
+                                    for jhalo_iout, ido in zip(igals, do):
+                                        # Loop only for those not yet found
+                                        if(ido):
+                                            # Loop only rivals
+                                            if (idesc in jhalo_iout['desc']):
+                                                # Loop only rival who doesn't have confirmed son
+                                                if (jhalo_iout['son']<=0):
+                                                    jid = gal2id(jhalo_iout)
+                                                    if jid != iid:
+                                                        jdesc, jdscore = maxdesc(jhalo_iout, all=False, offset=offset, nout=p.nout, nstep=p.nstep)
+                                                        # Loop only rival who has the same max-desc
+                                                        if jdesc==idesc:
+                                                            do[jhalo_iout['id']-1] = False
+                                                            nrival += 1
+                                                            # jhalo hasn't been accessed
+                                                            if jhalo_iout['son'] == 0:
+                                                                logger.debug(f"\t\trival {jid} newly have son {-idesc} ({jdscore:.4f})")
+                                                                jhalo_iout['son'] = -idesc
+                                                                jhalo_iout['son_score'] = jdscore
+                                                            # jhalo has hesitated son
+                                                            elif jhalo_iout['son'] < 0:
+                                                                if jhalo_iout['son_score'] > jdscore:
+                                                                    logger.debug(f"\t\trival {jid} keep original son {jhalo_iout['son']} ({jhalo_iout['son_score']:.4f}) rather than {-idesc} ({jdscore:.4f})")
+                                                                else:
+                                                                    logger.debug(f"\t\trival {jid} change original son {jhalo_iout['son']} ({jhalo_iout['son_score']:.4f}) to {-idesc} ({jdscore:.4f})")
+                                                                    jhalo_iout['son'] = -jdesc
+                                                                    jhalo_iout['son_score'] = jdscore
+                                                            # jhalo has confirmed son
+                                                            else:
+                                                                logger.debug(f"\t\trival {jid} keep original son {jhalo_iout['son']} ({jhalo_iout['son_score']:.4f}) rather than {-idesc} ({jdscore:.4f})")
+                                    # ihalo hasn't been accessed
+                                    if ihalo_iout['son'] == 0:
+                                        logger.debug(f"\t{iid} change original son {ihalo_iout['son']} ({ihalo_iout['son_score']:.4f}) to {idesc} ({idscore:.4f})")
+                                        ihalo_iout['son'] = idesc
+                                        ihalo_iout['son_score'] = idscore
+                                    # ihalo has been accessed
+                                    else:
+                                        if ihalo_iout['son_score'] > idscore:
+                                            logger.debug(f"\t {iid} keep original son {ihalo_iout['son']} ({ihalo_iout['son_score']:.4f}) rather than {idesc} ({idscore:.4f})")
+                                        else:
+                                            logger.debug(f"\t{iid} change original son {ihalo_iout['son']} ({ihalo_iout['son_score']:.4f}) to {idesc} ({idscore:.4f})")
+                                            ihalo_iout['son'] = idesc
+                                            ihalo_iout['son_score'] = idscore
+                                            
+                                    # dhalo hasn't been accessed
+                                    if dhalo['fat'] == 0:
+                                        logger.debug(f"\tAlso, son {idesc} have father {iid} with {pscore:.4f}")
+                                        dhalo['fat'] = iid
+                                        dhalo['fat_score'] = pscore
+                                    # dhalo has been accessed
+                                    else:
+                                        if dhalo['fat_score'] > pscore:
+                                            logger.debug(f"\tHowever, son {idesc} keep original father {dhalo['fat']} ({dhalo['fat_score']:.4f}) rather than {iid} ({pscore:.4f})")
+                                        else:
+                                            logger.debug(f"\tAlso, son {idesc} change original father {dhalo['fat']} ({dhalo['fat_score']:.4f}) to {iid} ({pscore:.4f})")
+                                            dhalo['fat'] = iid
+                                            dhalo['fat_score'] = pscore
+                                # Not choose each other (prog <-/-> desc)
+                                else:
+                                    # ihalo_iout, "my desc is `dhalo`!"
+                                    # dhalo, "No my prog is other `prog`!"
+                                    ihalo_iout['son'] = -idesc
+                                    ihalo_iout['son_score'] = idscore
+                                    dhalo['fat'] = -prog
+                                    dhalo['fat_score'] = pscore
+                                    logger.debug(f"\t{iid} has desc {idesc}, but his prog is {prog}")
 
         logger.info("Connect same Last...")
         for iout in p.nout:
@@ -246,15 +303,15 @@ def connect(p:DotDict, logger:logging.Logger):
                     last = gal['last']
 
                 if (gal['son'] != 0):
-                    desc = inst[np.abs(gal['son'])//100000][np.abs(gal['son'])%100000 - 1]
+                    desc = gethalo(np.abs(gal['son']), halos=inst)
                     last = desc['last']
-                    # gal['last'] = last
 
                 if (gal['fat']>0):
-                    prog = inst[gal['fat']//100000][gal['fat']%100000 - 1]
+                    prog = gethalo(gal['fat'], halos=inst)
                     if np.abs(prog['son']) == gal2id(gal):
                         prog['last'] = last
                 gal['last'] = last
+                
         logger.info("Connect same From...")
         for iout in p.nout[::-1]:
             gals = inst[iout]
@@ -265,12 +322,11 @@ def connect(p:DotDict, logger:logging.Logger):
                     From = gal['from']
 
                 if (gal['fat'] != 0):
-                    prog = inst[np.abs(gal['fat'])//100000][np.abs(gal['fat'])%100000 - 1]
+                    prog = gethalo(np.abs(gal['fat']), halos=inst)
                     From = prog['from']
-                    # gal['from'] = From
 
                 if (gal['son']>0):
-                    desc = inst[gal['son']//100000][gal['son']%100000 - 1]
+                    desc = gethalo(gal['son'], halos=inst)
                     if np.abs(desc['fat']) == gal2id(gal):
                         desc['from'] = From
                 gal['from'] = From
@@ -282,22 +338,31 @@ def connect(p:DotDict, logger:logging.Logger):
             gals = iinst if gals is None else np.hstack((gals, iinst))
     
         logger.info("Find fragmentation...")
-        uniqs = np.unique(gals['from'])
-        feedback = []
-        for uniq in uniqs:
-            first = gals[gals['from'] == uniq][-1]
+        Froms = np.unique(gals['from'])
+        feedback = [] # (From_now, Last_now, From_wannabe, Last_wannabe)
+        for From in Froms:
+            first = gals[gals['from'] == From][-1]
             if len(first['prog'])>0:
-                prog, score = maxprog(first)
+                prog, score = maxprog(first, nout=p.nout, nstep=p.nstep)
                 pgal = gethalo(prog, halos=inst)
+                # first and pfirst are not connected
                 pfirst = gals[gals['from'] == pgal['from']][-1]
+                # However, they have same last
                 if pgal['last'] == first['last']:
-                    feedback.append( (uniq, first['last'], -pfirst['from'], pfirst['last']) )
+                    feedback.append( (From, first['last'], -pfirst['from'], pfirst['last']) )
+                # They have different last
                 else:
+                    # pfirst is broken before first --> connect two branches
+                    # (p) [pfrom]---------[plast]
+                    # (i)                         [ifrom]------[ilast]
                     if pfirst['last']//100000 < first['timestep']:
-                        feedback.append( (uniq, first['last'], pfirst['from'], first['last']) )
+                        feedback.append( (From, first['last'], pfirst['from'], first['last']) )
                         feedback.append( (pfirst['from'], pfirst['last'], pfirst['from'], first['last']) )
+                    # pfirst is broken after first
+                    # (p) [pfrom]----------------------[plast]
+                    # (i)            [ifrom]---------------[ilast]
                     else:
-                        feedback.append( (uniq, first['last'], -pfirst['from'], pfirst['last']) )
+                        feedback.append( (From, first['last'], -pfirst['from'], first['last']) )
         From = np.copy(gals['from'])
         Last = np.copy(gals['last'])
         for feed in feedback:
@@ -307,6 +372,7 @@ def connect(p:DotDict, logger:logging.Logger):
         gals['last'] = Last
         pklsave(gals, f"{p.resultdir}/{p.logprefix}stable.pickle", overwrite=True)
         logger.info(f"`{p.resultdir}/{p.logprefix}stable.pickle` saved\n")
+
 
 
 
@@ -344,7 +410,7 @@ def make_log(repo:str, name:str, path_in_repo:str='YoungTree', prefix:str=None, 
     root_logger.setLevel(logging.DEBUG)
     root_logger.info("Debug Start")
     root_logger.propagate=False
-    return root_logger, resultdir
+    return root_logger, resultdir, fname
 
 class memory_tracker():
     __slots__ = ['ref', 'prefix', 'logger']
@@ -439,7 +505,7 @@ class DebugDecorator(object):
                 q16 = q50 = q84 = 0
             self.logger.info(f"{prefix}  cpu ({q50:.2f} %) [{q16:.1f} ~ {q84:.1f}]")
 
-def debugf(logger:logging.Logger, params:DotDict, ontime=True, onmem=True, oncpu=True):
+def debugf(params:DotDict, logger:logging.Logger, ontime=True, onmem=True, oncpu=True):
     def _debug(function):
         return DebugDecorator(function, params=params, logger=logger, ontime=ontime, onmem=onmem, oncpu=oncpu)
     return _debug

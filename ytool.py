@@ -7,6 +7,7 @@ import pickle
 import psutil
 from numba.core.config import NUMBA_NUM_THREADS
 from numba import config
+import traceback
 config.CPU_VECTORIZE=True
 config.CPU_CACHE_MAXSIZE='524288k'
 ncpu = NUMBA_NUM_THREADS
@@ -155,23 +156,43 @@ def gethalo(*args, halos=None):
     else:
         raise TypeError(f"{type(args)} is not understood")
     return halos[iout][iid-1]
-def maxdesc(halo, all=True, offset=1):
+
+
+def out2step(iout, nout, nstep):
+    try:
+        arg = np.argwhere(iout==nout)[0][0]
+        return nstep[arg]
+    except IndexError:
+        print(f"\n!!! {iout} is not in nout({np.min(nout)}~{np.max(nout)}) !!!\n")
+        traceback.print_stack()
+
+def step2out(istep, nout, nstep):
+    try:
+        arg = np.argwhere(istep==nstep)[0][0]
+        return nout[arg]
+    except IndexError:
+        print(f"\n!!! {istep} is not in nstep({np.min(nstep)}~{np.max(nstep)}) !!!\n")
+        traceback.print_stack()
+
+def maxdesc(halo, all=True, offset=1, nout=None, nstep=None):
     if len(halo['desc_score'])<1:
         return 0, -1
     arg = np.argmax(halo['desc_score'])
     if not all:
-        iout = halo['timestep']+offset
+        istep = out2step(halo['timestep'], nout, nstep)
+        iout = step2out(istep+offset, nout, nstep)
         ind = (halo['desc']//100000 == iout)
         if not True in ind:
             return 0, -1
         arg = np.argmax(halo['desc_score'] * ind)
     return halo['desc'][arg], halo['desc_score'][arg]
-def maxprog(halo, all=True, offset=1):
+def maxprog(halo, all=True, offset=1, nout=None, nstep=None):
     if len(halo['prog_score'])<1:
         return 0, -1
     arg = np.argmax(halo['prog_score'])
     if not all:
-        iout = halo['timestep']-offset
+        istep = out2step(halo['timestep'], nout, nstep)
+        iout = step2out(istep-offset, nout, nstep)
         ind = (halo['prog']//100000 == iout)
         if not True in ind:
             return 0, -1
