@@ -10,12 +10,12 @@
 #       "nh2":      NewHorizon2
 #       "nc":       NewCluster
 #       None
-mode = "y36415"
+mode = "nc"
 
 #   [ncpu]
 #   Set nthread in numba
 #   If ncpu <=0, skip
-ncpu = 24
+ncpu = 36
 nice = 0
 
 #   [galaxy]
@@ -25,11 +25,11 @@ nice = 0
 galaxy = True
 fullpath=None
 loadall = False
-usefortran = True
+usefortran = False
 
 #   [nsnap]
 #   How many snapshots to use for each galaxy
-nsnap = 5
+nsnap = 4
 
 #   [overwrite]
 #   If tree results already exist, overwrite or not?
@@ -46,14 +46,14 @@ logprefix = f"ytree_"
 #   Detail debugging in log
 #       True:   DEBUG level
 #       False:  INFO level
-detail = False
+detail = True
 ontime = True # Time check
 onmem = False # Memory check
 oncpu = False # CPU check
-verbose = 2
+verbose = 1
 
 #   [flushGB]
 #   Memory threshold for auto-flush in Gigabytes
-flushGB = 200
+flushGB = 300
 
 
