@@ -73,6 +73,7 @@ class TreeBase:
         self.logger:logging.Logger = self.mainlog
         self.dict_snap = {} # in {iout}, RamsesSnapshot object
         self.dict_gals = {} # in {iout}, galaxy array object
+        self.dict_pure = {}
         self.dict_leaves = defaultdict(dict) # in {iout}, in {galid}, Leaf object
         self.part_halo_match = {} # in {iout}, list of int
         gc.collect()
@@ -122,6 +123,7 @@ class TreeBase:
                     @_debug
                     def __load_gals(self, iout:int, galid=None, prefix="", level='info'):
                         gm, gpids = uhmi.HaloMaker.load(snap, galaxy=self.p.galaxy, double_precision=self.p.dp, load_parts=True, full_path=self.p.fullpath)
+                        #     gm, gpids = uhmi.HaloMaker.cut_table(gm, gpids, mask)
                         haloids = np.repeat(gm['id'], gm['nparts'])
                         self.part_halo_match[iout] = np.zeros(np.max(gpids), dtype=int)
                         self.part_halo_match[iout][gpids-1] = haloids
@@ -129,6 +131,9 @@ class TreeBase:
                     gm = __load_gals(self, iout, galid=galid, prefix=prefix, level=level)
                 else:
                     gm = uhmi.HaloMaker.load(snap, galaxy=self.p.galaxy, double_precision=self.p.dp, full_path=self.p.fullpath)
+                if not (self.p.galaxy):
+                    mask = gm['mcontam']/gm['m'] <= self.p.fcontam
+                    self.dict_pure[iout] = mask
                 self.dict_gals[iout] = gm
             _load_gals(self, iout,galid=galid, prefix=prefix, level=level)
         self.memory = GB()
@@ -169,6 +174,7 @@ class TreeBase:
             snap = self.load_snap(iout, prefix=prefix)
             if self.p.loadall:
                 gals = self.load_gals(iout, galid='all')
+                if(not self.p.galaxy): gals = gals[ self.dict_pure[iout] ]
                 parts = snap.part
                 partmatch = self.read_part_halo_match(iout)
                 for igal in gals:
@@ -180,10 +186,11 @@ class TreeBase:
                 snap.clear()
             else:
                 gal = self.load_gals(iout, galid, prefix=prefix)
-                part = uhmi.HaloMaker.read_member_part(snap, galid, galaxy=self.p.galaxy, full_path=self.p.fullpath, usefortran=self.p.usefortran)
-                ileaf = Leaf(self, gal, part, backup=backup)
-                if not ileaf.contam:
-                    self.dict_leaves[iout][galid]=ileaf
+                if gal['mcontam']/gal['m'] <= self.p.fcontam:
+                    part = uhmi.HaloMaker.read_member_part(snap, galid, galaxy=self.p.galaxy, full_path=self.p.fullpath, usefortran=self.p.usefortran)
+                    ileaf = Leaf(self, gal, part, backup=backup)
+                    if not ileaf.contam:
+                        self.dict_leaves[iout][galid]=ileaf
 
     def load_leaf(self, iout:int, galid:int, backup:dict=None, prefix="", level='debug')->'Leaf':
         if not galid in self.dict_leaves[iout].keys():
@@ -192,7 +199,8 @@ class TreeBase:
             if self.dict_leaves[iout][galid] is None:
                 self._load_leaf(iout, galid, backup=backup, prefix=prefix, level=level)
         self.memory = GB()
-        return self.dict_leaves[iout][galid]
+        if galid in self.dict_leaves[iout].keys():
+            return self.dict_leaves[iout][galid]
     
     @_debug
     def flush(self, iout:int, prefix="", leafclear=False, logger=None, level='info'):
@@ -257,6 +265,12 @@ class TreeBase:
                 if os.path.isfile(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout}_partmatch.pkl"):
                     os.remove(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout}_partmatch.pkl")
                     self.print(f"[flush] Dumped partmatch at {iout} is removed")
+                    
+            keys = list(self.dict_pure)
+            if iout in keys:
+                self.dict_pure[iout] = ...
+                del self.dict_pure[iout]
+                
         gc.collect()
         self.memory = GB()
 
@@ -342,6 +356,7 @@ class TreeBase:
                 hosts = hosts[hosts>0]
                 hosts, count = np.unique(hosts, return_counts=True) # CPU?
                 hosts = hosts[count/len(pid) > mcut]
+                hosts = hosts[ np.isin(hosts, list(self.dict_leaves[jout].keys()),assume_unique=True) ]
                 if len(hosts)>0:
                     otherleaves = [self.load_leaf(jout, iid) for iid in hosts]
                     ids, scores = ileaf.calc_score(jout, otherleaves, prefix=f"<{ileaf._name}>",level='debug') # CPU?
@@ -438,7 +453,8 @@ class TreeBase:
                     self.mainlog.info(f"[Queue] {howmany(gals['mcontam']/gals['m'] < self.p.fcontam, True)}/{len(gals)} {self.galstr}s at {iout}")
                 except:
                     self.mainlog.info(f"[Queue] {len(gals)} {self.galstr}s at {iout}")
-        for galid in self.dict_gals[iout]['id']:
+        gals = self.dict_gals[iout]['id'] if self.p.galaxy else self.dict_gals[iout]['id'][self.dict_pure[iout]]
+        for galid in gals:
             backup:dict = None
             if (leaves is not None):
                 if galid in leaves.keys():
@@ -520,6 +536,7 @@ class Leaf:
                 self.contam = True
             else:
                 pass
+            self._name = f"L{self.id} at {self.iout} ({int(100*self.cat['mcontam']/self.cat['m'])}%)"
         except:
             pass
         

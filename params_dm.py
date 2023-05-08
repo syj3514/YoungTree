@@ -10,13 +10,13 @@
 #       "nh2":      NewHorizon2
 #       "nc":       NewCluster
 #       None
-mode = "y05427"
+mode = "y49096"
 
 #   [ncpu]
 #   Set nthread in numba
 #   If ncpu <=0, skip
 ncpu = 24
-nice = 5
+nice = 1
 
 #   [galaxy]
 #   Type of data
@@ -24,7 +24,7 @@ nice = 5
 #       False:    Use halo and DM
 galaxy = False
 fullpath=None
-loadall = False
+loadall = True
 usefortran = False
 fcontam = 0.1 # Ignore halos with contaminated greater than fcontam
 
@@ -41,13 +41,13 @@ overwrite = True
 #   [logprefix]
 #   file name of ytree log (./logprefix_iout.log)
 # logprefix = f"ytree_"
-logprefix = f"ytree_dm_dev"
+logprefix = f"ytree_dm_"
 
 #   [detail]
 #   Detail debugging in log
 #       True:   DEBUG level
 #       False:  INFO level
-detail = True
+detail = False
 ontime = True # Time check
 onmem = False # Memory check
 oncpu = False # CPU check
@@ -55,6 +55,6 @@ verbose = 1
 
 #   [flushGB]
 #   Memory threshold for auto-flush in Gigabytes
-flushGB = 100
+flushGB = 200
 
 
