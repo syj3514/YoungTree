@@ -145,7 +145,7 @@ def gal2id(gal):
 def id2gal(iid):
     return iid//100000, iid%100000
 
-def gethalo(*args, halos=None):
+def gethalo(*args, halos=None, complete=False):
     if isinstance(args, tuple):
         if len(args)==2:
             iout, iid = args
@@ -155,7 +155,11 @@ def gethalo(*args, halos=None):
             raise TypeError(f"{type(args)} is not understood")
     else:
         raise TypeError(f"{type(args)} is not understood")
-    return halos[iout][iid-1]
+    if(complete):
+        return halos[iout][iid-1]
+    else:
+        arg = np.argwhere(halos[iout]['id']==iid)[0][0]
+        return halos[iout][arg]
 
 
 def out2step(iout, nout, nstep):
