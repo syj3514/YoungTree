@@ -28,39 +28,45 @@ if __name__=='__main__':
         os.mkdir(f"{params.resultdir}/by-product")
     if not os.path.exists(f"{params.resultdir}/log"):
         os.mkdir(f"{params.resultdir}/log")
+    try:
+        if not os.path.isfile(f"{params.resultdir}/{params.logprefix}stable.pickle"):
+            if not os.path.isfile(f"{params.resultdir}/{params.logprefix}all.pickle"):
+                if not os.path.isfile(f"{params.resultdir}/by-product/{params.logprefix}checkpoint.pickle"):
+                    treebase = yroot.TreeBase(params, logger=mainlog)
+                    
+                    reftime = time.time()
+                    for iout in params.nout:
+                        do_onestep(treebase, iout, reftot=reftime)
+                        if treebase.memory > treebase.p.flushGB:
+                            treebase.flush(iout)
 
-    if not os.path.isfile(f"{params.resultdir}/{params.logprefix}stable.pickle"):
-        if not os.path.isfile(f"{params.resultdir}/{params.logprefix}all.pickle"):
-            if not os.path.isfile(f"{params.resultdir}/by-product/{params.logprefix}checkpoint.pickle"):
-                treebase = yroot.TreeBase(params, logger=mainlog)
+                    outs = list(treebase.dict_leaves.keys())
+                    for iout in outs:
+                        treebase.flush(iout, leafclear="True")
+                        treebase.finalize(iout)
+                    treebase.mainlog.info(f"\n{treebase.summary()}\n")
+                    
+                    pklsave(np.array([]), f"{params.resultdir}/by-product/{params.logprefix}checkpoint.pickle")
+                    treebase.mainlog.info("\nLeaf save Done\n"); print("\nLeaf save Done\n")
+                    treebase = None
+                    gc.collect()
+
+                func = DebugDecorator(gather, params=params, logger=mainlog)
+                func(params, mainlog)
+                mainlog.info("\nGather Done\n"); print("\nGather Done\n")
                 
-                reftime = time.time()
-                for iout in params.nout:
-                    do_onestep(treebase, iout, reftot=reftime)
-                    if treebase.memory > treebase.p.flushGB:
-                        treebase.flush(iout)
-
-                outs = list(treebase.dict_leaves.keys())
-                for iout in outs:
-                    treebase.flush(iout, leafclear="True")
-                    treebase.finalize(iout)
-                treebase.mainlog.info(f"\n{treebase.summary()}\n")
-                
-                pklsave(np.array([]), f"{params.resultdir}/by-product/{params.logprefix}checkpoint.pickle")
-                treebase.mainlog.info("\nLeaf save Done\n"); print("\nLeaf save Done\n")
-                treebase = None
-                gc.collect()
-
-            func = DebugDecorator(gather, params=params, logger=mainlog)
-            func(params, mainlog)
-            mainlog.info("\nGather Done\n"); print("\nGather Done\n")
             
+            mainlog.info("\nConnect Start\n"); print("\nConnect Start\n")
+            connectlog, resultdir,_ = make_log(params.repo, "connect", detail=params.detail, prefix=params.logprefix)
+            
+            func = DebugDecorator(connect, params=params, logger=connectlog)
+            func(params, connectlog)
+            mainlog.info("\nConnect Done\n"); print("\nConnect Done\n")
         
-        mainlog.info("\nConnect Start\n"); print("\nConnect Start\n")
-        connectlog, resultdir,_ = make_log(params.repo, "connect", detail=params.detail, prefix=params.logprefix)
-        
-        func = DebugDecorator(connect, params=params, logger=connectlog)
-        func(params, connectlog)
-        mainlog.info("\nConnect Done\n"); print("\nConnect Done\n")
-    
-    mainlog.info(f"\nYoungTree Done\nSee `{params.resultdir}/{params.logprefix}stable.pickle`"); print(f"\nYoungTree Done\nSee `{params.resultdir}/{params.logprefix}stable.pickle`")
+        mainlog.info(f"\nYoungTree Done\nSee `{params.resultdir}/{params.logprefix}stable.pickle`"); print(f"\nYoungTree Done\nSee `{params.resultdir}/{params.logprefix}stable.pickle`")
+    except Exception as e:
+        print(); mainlog.error("")
+        print(traceback.format_exc()); mainlog.error(traceback.format_exc())
+        print(e); mainlog.error(e)
+        print("\nIteration is terminated\n"); mainlog.error("\nIteration is terminated\n")
+        os._exit(1)
