@@ -8,9 +8,6 @@ import psutil
 from numba.core.config import NUMBA_NUM_THREADS
 from numba import config
 import traceback
-config.CPU_VECTORIZE=True
-config.CPU_CACHE_MAXSIZE='524288k'
-ncpu = NUMBA_NUM_THREADS
 
 yess = ["Y","y","yes", "YES", "Yes"]
 ####################################################################################################################
@@ -293,7 +290,7 @@ def nbnorm(l:np.ndarray)->float:
         s += l[i]**2
     return np.sqrt(s)
 
-@nb.jit(parallel=True)
+@nb.jit(parallel=True, nopython=True)
 def large_isin(a, b):
     '''
     [numba] Return part of a which is in b
@@ -313,7 +310,7 @@ def large_isin(a, b):
             result[i] = True
     return result
 
-@nb.jit(parallel=True)
+@nb.jit(parallel=True, nopython=True)
 def large_isind(a, b):
     '''
     [numba] Return part of a which is in b
@@ -333,7 +330,7 @@ def large_isind(a, b):
             result[i] = True
     return np.where(result)[0]
 
-@nb.jit(fastmath=True)
+@nb.jit(fastmath=True, nopython=True)
 def atleast_numba(a, b):
     '''
     Return True if any element of a is in b

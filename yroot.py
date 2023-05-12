@@ -102,7 +102,7 @@ class TreeBase:
                 path_in_repo="" if self.p.mode[0] == '/' else "snapshots"
                 snap = uri.RamsesSnapshot(self.p.repo, iout, mode=self.p.rurmode, path_in_repo=path_in_repo)
                 if(self.p.loadall)and(not iout in self.banned_list):
-                    if(self.mode[0]=='y')or(self.mode=='nh'):
+                    if(self.p.mode[0]=='y')or(self.p.mode=='nh'):
                         snap.get_part(nthread=self.p.ncpu, target_fields=["x","y","z","vx","vy","vz","m","epoch","id","cpu"])
                     else:
                         snap.get_part(nthread=self.p.ncpu, target_fields=["x","y","z","vx","vy","vz","m","epoch","id","cpu","family"])
