@@ -84,7 +84,7 @@ def do_onestep(Tree:'TreeBase', iout:int, reftot:float=time.time()):
             
             # Load snap gal part
             Tree.logger.info(f"\n\nStart at iout={iout}\n")
-            Tree.leaf_read(iout, level='info')
+            Tree.leaf_read(iout, level='info', verbose=0)
             Tree.logger.info("\n")
             
             # Find progenitors
@@ -93,7 +93,7 @@ def do_onestep(Tree:'TreeBase', iout:int, reftot:float=time.time()):
                 if jstep > 0:
                     jout = Tree.step2out(jstep)
                     Tree.logger.info(f"\n\nProgenitor at jout={jout}\n")
-                    Tree.leaf_read(jout, level='info')
+                    Tree.leaf_read(jout, level='info', verbose=0)
                     Tree.logger.info("\n")
                     Tree.find_cands(iout, jout, level='info')
             
@@ -104,13 +104,13 @@ def do_onestep(Tree:'TreeBase', iout:int, reftot:float=time.time()):
                     jout = Tree.step2out(jstep)
                     if not jout in Tree.dict_snap.keys():
                         Tree.logger.info(f"\n\nDescendant at jout={jout}\n")
-                        Tree.leaf_read(jout, level='info')
+                        Tree.leaf_read(jout, level='info', verbose=0)
                         Tree.logger.info("\n")
                         Tree.find_cands(iout, jout, level='info')
             Tree.logger.info(f"\n\n")
             
             # Flush redundant snapshots
-            cutstep = istep+5
+            cutstep = istep+Tree.p.nsnap
             if cutstep<=np.max(nstep):
                 cutout = Tree.step2out(cutstep)
                 outs = list(Tree.dict_leaves.keys())
@@ -148,11 +148,11 @@ def gather(p:DotDict, logger:logging.Logger):
     if go:
         logger.info("Gather all files...")
         for i, iout in enumerate(p.nout):
-            file = pklload(f"{p.resultdir}/by-product/{p.logprefix}{iout:05d}.pickle")
+            brick = pklload(f"{p.resultdir}/by-product/{p.logprefix}{iout:05d}.pickle")
             if i==0:
-                gals = file
+                gals = brick
             else:
-                gals = np.hstack((gals, file))
+                gals = np.hstack((gals, brick))
         logger.info("Add column `last`...")
         temp = np.zeros(len(gals), dtype=np.int32)
         gals = append_fields(gals, "last", temp, usemask=False, asrecarray=False)
@@ -191,19 +191,22 @@ def connect(p:DotDict, logger:logging.Logger):
         ans=input(f"You already have `{p.resultdir}/{p.logprefix}stable.pickle`. Ovewrite? [Y/N]")
         go = ans in yess
     if go:
-        logger.info("Make dictionary...")
+        logger.info("Make dictionary from catalogue...")
         gals = append_fields(gals, "from", np.zeros(len(gals), dtype=np.int32), usemask=False)
         gals = append_fields(gals, "fat", np.zeros(len(gals), dtype=np.int32), usemask=False)
         gals = append_fields(gals, "son", np.zeros(len(gals), dtype=np.int32), usemask=False)
         gals = append_fields(gals, "fat_score", np.zeros(len(gals), dtype=np.float64), usemask=False)
         gals = append_fields(gals, "son_score", np.zeros(len(gals), dtype=np.float64), usemask=False)
         inst = {}
+        complete = True
         for iout in p.nout:
             inst[iout] = gals[gals['timestep']==iout]
+            if(len(inst[iout])!=np.max(inst[iout]['id'])):
+                complete = False
         gals = None
 
         logger.info("Find son & father...")
-        offsets = np.array([1,2,3,4,5])
+        offsets = np.arange(1, 1+p.nsnap)
         for offset in offsets:
             logger.info(f"\n\n  OFFSET={offset}\n")
             iterobj = p.nout
@@ -211,9 +214,10 @@ def connect(p:DotDict, logger:logging.Logger):
                 dstep = out2step(iout, p.nout, p.nstep)+offset
                 if dstep in p.nstep:
                     igals = inst[iout]
-                    do = np.ones(len(igals), dtype=bool)
+                    do = np.ones(np.max(igals['id']), dtype=bool)
                     for ihalo_iout in igals:
                         do[ihalo_iout['id']-1] = False
+                        # For halos who don't have confirmed son
                         if ihalo_iout['son']<=0:
                             iid = gal2id(ihalo_iout)
                             idesc, idscore = maxdesc(ihalo_iout, all=False, offset=offset, nout=p.nout, nstep=p.nstep)
@@ -221,7 +225,7 @@ def connect(p:DotDict, logger:logging.Logger):
                                 logger.debug(f"\t{iid} No desc")
                                 pass
                             else:
-                                dhalo = gethalo(idesc//100000, idesc%100000, halos=inst) # desc of ihalo_iout
+                                dhalo = gethalo(idesc//100000, idesc%100000, halos=inst, complete=complete) # desc of ihalo_iout
                                 prog, pscore = maxprog(dhalo, all=False, offset=offset, nout=p.nout, nstep=p.nstep)  # prog of desc of ihalo_iout
                                 # Choose each other (prog <-> desc)
                                 if prog==iid:
@@ -250,7 +254,7 @@ def connect(p:DotDict, logger:logging.Logger):
                                                                 if jhalo_iout['son_score'] > jdscore:
                                                                     logger.debug(f"\t\trival {jid} keep original son {jhalo_iout['son']} ({jhalo_iout['son_score']:.4f}) rather than {-idesc} ({jdscore:.4f})")
                                                                 else:
-                                                                    logger.debug(f"\t\trival {jid} change original son {jhalo_iout['son']} ({jhalo_iout['son_score']:.4f}) to {-idesc} ({jdscore:.4f})")
+                                                                    logger.debug(f"\t\trival {jid} change original son {jhalo_iout['son']} ({jhalo_iout['son_score']:.4f}) to {-jdesc} ({jdscore:.4f})")
                                                                     jhalo_iout['son'] = -jdesc
                                                                     jhalo_iout['son_score'] = jdscore
                                                             # jhalo has confirmed son
@@ -287,80 +291,83 @@ def connect(p:DotDict, logger:logging.Logger):
                                 else:
                                     # ihalo_iout, "my desc is `dhalo`!"
                                     # dhalo, "No my prog is other `prog`!"
-                                    ihalo_iout['son'] = -idesc
-                                    ihalo_iout['son_score'] = idscore
-                                    dhalo['fat'] = -prog
-                                    dhalo['fat_score'] = pscore
                                     logger.debug(f"\t{iid} has desc {idesc}, but his prog is {prog}")
+                                    if(ihalo_iout['son_score'] < idscore):
+                                        logger.debug(f"\t\t{iid} change original son {ihalo_iout['son']} ({ihalo_iout['son_score']:.4f}) to {-idesc} ({idscore:.4f})")
+                                        ihalo_iout['son'] = -idesc
+                                        ihalo_iout['son_score'] = idscore
+                                    if(dhalo['fat_score'] < pscore):
+                                        logger.debug(f"\t\t{idesc} change original fat {dhalo['fat']} ({dhalo['fat_score']:.4f}) to {-prog} ({pscore:.4f})")
+                                        dhalo['fat'] = -prog
+                                        dhalo['fat_score'] = pscore
+                                    
 
         logger.info("Connect same Last...")
         for iout in p.nout:
             gals = inst[iout]
             for gal in gals:
-                if gal['last'] == 0:
-                    last = gal2id(gal)
-                else:
-                    last = gal['last']
-
-                if (gal['son'] != 0):
-                    desc = gethalo(np.abs(gal['son']), halos=inst)
+                last = gal2id(gal) if(gal['last'] == 0) else gal['last']
+                if(gal['son'] != 0):
+                    desc = gethalo(np.abs(gal['son']), halos=inst, complete=complete)
                     last = desc['last']
-
-                if (gal['fat']>0):
-                    prog = gethalo(gal['fat'], halos=inst)
-                    if np.abs(prog['son']) == gal2id(gal):
-                        prog['last'] = last
+                    
                 gal['last'] = last
-                
+                if(gal['fat'] > 0):
+                    prog = gethalo(gal['fat'], halos=inst, complete=complete)
+                    if(np.abs(prog['son']) == gal2id(gal)):
+                        prog['last'] = last
+
         logger.info("Connect same From...")
         for iout in p.nout[::-1]:
             gals = inst[iout]
             for gal in gals:
-                if gal['from'] == 0:
-                    From = gal2id(gal)
-                else:
-                    From = gal['from']
-
+                From = gal2id(gal) if(gal['from'] == 0) else gal['from']
                 if (gal['fat'] != 0):
-                    prog = gethalo(np.abs(gal['fat']), halos=inst)
+                    prog = gethalo(np.abs(gal['fat']), halos=inst, complete=complete)
                     From = prog['from']
 
+                gal['from'] = From
                 if (gal['son']>0):
-                    desc = gethalo(gal['son'], halos=inst)
+                    desc = gethalo(gal['son'], halos=inst, complete=complete)
                     if np.abs(desc['fat']) == gal2id(gal):
                         desc['from'] = From
-                gal['from'] = From
     
-        logger.info("Recover catalogue...")
+        logger.info("Recover catalogue from dictionary...")
         gals = None
         for iout in p.nout:
             iinst = inst[iout]
             gals = iinst if gals is None else np.hstack((gals, iinst))
     
         logger.info("Find fragmentation...")
+        # 1) Pick up each branch based on `from`
+        # 2) Find their "first" leaf
+        # 3) If "first" leaf has progenitors, check the connection
         Froms = np.unique(gals['from'])
         feedback = [] # (From_now, Last_now, From_wannabe, Last_wannabe)
         for From in Froms:
             first = gals[gals['from'] == From][-1]
             if len(first['prog'])>0:
                 prog, score = maxprog(first, nout=p.nout, nstep=p.nstep)
-                pgal = gethalo(prog, halos=inst)
+                pgal = gethalo(prog, halos=inst, complete=complete)
                 # first and pfirst are not connected
                 pfirst = gals[gals['from'] == pgal['from']][-1]
                 # However, they have same last
                 if pgal['last'] == first['last']:
+                    ### (i) is fragmented from (p)
                     feedback.append( (From, first['last'], -pfirst['from'], pfirst['last']) )
                 # They have different last
                 else:
                     # pfirst is broken before first --> connect two branches
                     # (p) [pfrom]---------[plast]
                     # (i)                         [ifrom]------[ilast]
+                    ### (i) is descendant of (p)
                     if pfirst['last']//100000 < first['timestep']:
                         feedback.append( (From, first['last'], pfirst['from'], first['last']) )
                         feedback.append( (pfirst['from'], pfirst['last'], pfirst['from'], first['last']) )
                     # pfirst is broken after first
                     # (p) [pfrom]----------------------[plast]
                     # (i)            [ifrom]---------------[ilast]
+                    ### (i) is fragmented from (p)
                     else:
                         feedback.append( (From, first['last'], -pfirst['from'], first['last']) )
         From = np.copy(gals['from'])
@@ -431,7 +438,7 @@ class memory_tracker():
 
 class timer():
     __slots__ = ['ref', 'units', 'corr', 'unit', 'text', 'verbose', 'logger', 'level']
-    def __init__(self, unit:str="sec",text:str="", verbose:int=2, logger:logging.Logger=None, level:str='info'):
+    def __init__(self, unit:str="sec",text:str="", verbose:bool=True, logger:logging.Logger=None, level:str='info'):
         self.ref = time.time()
         self.units = {"ms":1/1000, "sec":1, "min":60, "hr":3600}
         self.corr = self.units[unit]
@@ -440,19 +447,20 @@ class timer():
         self.verbose=verbose
         self.logger=logger
         self.level = level
-        
-        if self.logger is not None:
-            if self.level == 'info': self.logger.info(f"{text} START")
-            else: self.logger.debug(f"{text} START")
-        else: print(f"{text} START")
+        if(self.verbose):
+            if self.logger is not None:
+                if self.level == 'info': self.logger.info(f"{text} START")
+                else: self.logger.debug(f"{text} START")
+            else: print(f"{text} START")
     
     def done(self, add=None):
-        elapse = time.time()-self.ref
-        if add is not None: self.text = f"{self.text} {add}"
-        if self.logger is not None:
-            if self.level == 'info': self.logger.info(f"{self.text} Done ({elapse/self.corr:.3f} {self.unit})")
-            else: self.logger.debug(f"{self.text} Done ({elapse/self.corr:.3f} {self.unit})")
-        else: print(f"{self.text} Done ({elapse/self.corr:.3f} {self.unit})")
+        if(self.verbose):
+            elapse = time.time()-self.ref
+            if add is not None: self.text = f"{self.text} {add}"
+            if self.logger is not None:
+                if self.level == 'info': self.logger.info(f"{self.text} Done ({elapse/self.corr:.3f} {self.unit})")
+                else: self.logger.debug(f"{self.text} Done ({elapse/self.corr:.3f} {self.unit})")
+            else: print(f"{self.text} Done ({elapse/self.corr:.3f} {self.unit})")
 
 import threading
 class DisplayCPU(threading.Thread):

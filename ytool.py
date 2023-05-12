@@ -62,14 +62,15 @@ def mode2repo(mode):
         raise ValueError(f"{mode} is currently not supported!")
     return repo, rurmode, dp
 
-def make_params_dict(fname:str) -> None:
+def make_params_dict(fname:str, mode=None) -> None:
     arg = fname.find('.')
     param_name = fname[:arg]
     params = importlib.import_module(param_name)
     p = {}
     for key in params.__dict__.keys():
         p[key] = params.__dict__[key]
-    mode = p['mode']
+    mode = p['mode'] if mode is None else mode
+    p['mode'] = mode
     dp = True if p['galaxy'] else False
     if mode[0] == 'h':
         rurmode = 'hagn'; repo = f"/storage4/Horizon_AGN"; dp = False
