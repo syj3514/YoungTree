@@ -10,7 +10,7 @@
 #       "nh2":      NewHorizon2
 #       "nc":       NewCluster
 #       None
-mode = "y49096"
+mode = "y07206"
 
 #   [ncpu]
 #   Set nthread in numba
@@ -55,6 +55,6 @@ verbose = 1
 
 #   [flushGB]
 #   Memory threshold for auto-flush in Gigabytes
-flushGB = 200
+flushGB = 150
 
 

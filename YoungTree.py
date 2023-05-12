@@ -6,22 +6,28 @@ import yroot
 import time
 from numba import set_num_threads
 import gc
+import argparse
 
 # Read command
-print("$ python3 YoungTree.py params.py <ncpu>")
-args = sys.argv
-assert len(args)>=2
+print("$ python3 YoungTree.py params.py [-ncpu 32] [-mode y07206]")
+# args = sys.argv
+# assert len(args)>=2
+
+parser = argparse.ArgumentParser(description='YoungTree (syj3514@yonsei.ac.kr)')
+parser.add_argument("params", metavar='params', help='params.py', type=str)
+parser.add_argument("-n", "--ncpu", required=False, help='The number of threads', type=int)
+parser.add_argument("-m", "--mode", required=False, help='Simulation mode', type=str)
+args = parser.parse_args()
 
 if __name__=='__main__':
     # Read params
-    params = make_params_dict(args[1])
+    params = make_params_dict(args.params, mode=args.mode)
     if(params.nice>0): os.nice(params.nice)
     mainlog, resultdir,_ = make_log(params.repo, "main", detail=params.detail, prefix=params.logprefix)
     params.resultdir = resultdir
     mainlog.info(f"\nAllow {params.flushGB:.2f} GB Memory\n"); print(f"\nAllow {params.flushGB:.2f} GB Memory\n")
     mainlog.info(f"\nSee `{params.resultdir}`\n"); print(f"\nSee `{params.resultdir}`\n")
-    if len(args)>2:
-        params.ncpu = int(args[2])
+    if(args.ncpu is not None): params.ncpu = args.ncpu
     set_num_threads(params.ncpu)
 
     if not os.path.exists(f"{params.resultdir}/by-product"):
