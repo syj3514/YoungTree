@@ -184,7 +184,7 @@ class TreeBase:
                     if not leaf.contam:
                         leaf.base = self
                         leaf.logger = self.logger
-                        self.dict_leaves[iout][galid] = leaf:
+                        self.dict_leaves[iout][galid] = leaf
                 else:
                     snap = self.load_snap(iout, prefix=prefix)
                     if self.p.loadall:
