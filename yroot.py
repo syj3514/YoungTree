@@ -77,6 +77,8 @@ class TreeBase:
         self.dict_pure = {}
         self.dict_leaves = defaultdict(dict) # in {iout}, in {galid}, Leaf object
         self.part_halo_match = {} # in {iout}, list of int
+        self.banned_list = []
+        self.out_of_use = []
         gc.collect()
 
         self.ontime = self.p.ontime
@@ -99,13 +101,17 @@ class TreeBase:
             def _load_snap(self, iout:int, prefix:str="", level='info', verbose=verbose):
                 path_in_repo="" if self.p.mode[0] == '/' else "snapshots"
                 snap = uri.RamsesSnapshot(self.p.repo, iout, mode=self.p.rurmode, path_in_repo=path_in_repo)
-                if(self.p.loadall):
-                    snap.get_part(nthread=self.p.ncpu)
+                if(self.p.loadall)and(not iout in self.banned_list):
+                    if(self.mode[0]=='y')or(self.mode=='nh'):
+                        snap.get_part(nthread=self.p.ncpu, target_fields=["x","y","z","vx","vy","vz","m","epoch","id","cpu"])
+                    else:
+                        snap.get_part(nthread=self.p.ncpu, target_fields=["x","y","z","vx","vy","vz","m","epoch","id","cpu","family"])
                     parts = snap.part[self.partstr]
                     arg = np.argsort(np.abs(parts['id']))
                     parts = parts[arg]
                     if not (parts.ptype == self.partstr): parts.ptype = self.partstr
                     snap.part = parts
+                    snap.part_data = np.array([])
                 self.dict_snap[iout] = snap
             _load_snap(self, iout, prefix=prefix, level=level, verbose=verbose)
         self.memory = GB()
@@ -120,7 +126,7 @@ class TreeBase:
             @_debug
             def _load_gals(self, iout:int, galid=None, prefix="", level='info', verbose=0):
                 snap = self.load_snap(iout, prefix=prefix, verbose=verbose+1)
-                if not iout in self.part_halo_match.keys():
+                if(not iout in self.part_halo_match.keys())and(not iout in self.banned_list):
                     @_debug
                     def __load_gals(self, snap:uri.RamsesSnapshot, galid=None, prefix="", level='info', verbose=1):
                         gm, gpids = uhmi.HaloMaker.load(snap, galaxy=self.p.galaxy, double_precision=self.p.dp, load_parts=True, full_path=self.p.fullpath)
@@ -178,7 +184,7 @@ class TreeBase:
                     if not leaf.contam:
                         leaf.base = self
                         leaf.logger = self.logger
-                        self.dict_leaves[iout][galid] = leaf
+                        self.dict_leaves[iout][galid] = leaf:
                 else:
                     snap = self.load_snap(iout, prefix=prefix)
                     if self.p.loadall:
@@ -187,14 +193,17 @@ class TreeBase:
                         parts = snap.part
                         partmatch = self.read_part_halo_match(iout)
                         for igal in gals:
-                            pind = np.where(partmatch == igal['id'])[0]
-                            part = parts[pind]
                             if(backups is not None):
                                 backup = backups[igal['id']]
+                                part = None
+                            else:
+                                pind = np.where(partmatch == igal['id'])[0]
+                                part = parts[pind]
                             ileaf = Leaf(self, igal, part, backup=backup)
                             if not ileaf.contam:
                                 self.dict_leaves[iout][igal['id']] = ileaf
-                        # snap.clear()
+                        snap.clear()
+                        self.banned_list.append(iout)
                     else:
                         gal = self.load_gals(iout, galid, prefix=prefix)
                         if gal['mcontam']/gal['m'] <= self.p.fcontam:
@@ -215,118 +224,79 @@ class TreeBase:
         istep = out2step(iout, self.p.nout, self.p.nstep)
         cstep = istep+self.p.nsnap
         
+        # 1)
+        # Remove Out-of-use data in memory and disk
+        keys = list(self.dict_snap.keys())
+        for jout in keys:
+            if(jout in self.out_of_use):
+                self.dict_snap[jout].clear()
+                del self.dict_snap[jout]
+                self.print(f"[flush #1] snapshot at {jout} is released", level='info')
+        keys = list(self.dict_gals.keys())
+        for jout in keys:
+            if(jout in self.out_of_use):
+                self.dict_gals[jout] = {}
+                del self.dict_gals[jout]
+                self.print(f"[flush #1] gals at {jout} is released", level='info')
+        keys = list(self.part_halo_match.keys())
+        for jout in keys:
+            if(jout in self.out_of_use):
+                self.part_halo_match[jout] = []
+                del self.part_halo_match[jout]
+                if os.path.isfile(f"{self.p.resultdir}/by-product/{self.p.logprefix}{jout}_partmatch.pkl"):
+                    os.remove(f"{self.p.resultdir}/by-product/{self.p.logprefix}{jout}_partmatch.pkl")
+                    self.print(f"[flush #1] dumped partmatch at {jout} is removed", level='info')
+                self.print(f"[flush #1] part_halo_match at {jout} is released", level='info')
+        keys = list(self.dict_pure)
+        for jout in keys:
+            if(jout in self.out_of_use):
+                self.dict_pure[jout] = []
+                del self.dict_pure[jout]
+                self.print(f"[flush #1] dict_pure at {jout} is released", level='info')
+        keys = list(self.dict_leaves.keys())
+        for jout in keys:
+            if(jout in self.out_of_use):
+                keys2 = list(self.dict_leaves[jout].keys())
+                for key in keys2:
+                    if(self.dict_leaves[jout][key] is not None):self.dict_leaves[jout][key].clear()
+                    del self.dict_leaves[jout][key]
+                    if os.path.isfile(f"{self.p.resultdir}/by-product/{self.p.logprefix}{jout}_leaf_{key}.pkl"):
+                        os.remove(f"{self.p.resultdir}/by-product/{self.p.logprefix}{jout}_leaf_{key}.pkl")
+                        self.print(f"[flush #1] dumped leaf{key} at {jout} is removed", level='info')
+                del self.dict_leaves[jout]
+                self.print(f"[flush #1] leaves at {jout} are released", level='info')                
+        gc.collect()
         self.memory = GB()
+            
+        # 2)    
+        # Dumping data in memory
         if(self.memory > self.p.flushGB):
-            # keys = list(self.dict_snap.keys())
-            # if(iout in keys):
-            #     self.dict_snap[iout].clear()
-            #     del self.dict_snap[iout]
-            #     self.print(f"[flush] snapshot at {iout} is released", level='info')
-            keys = list(self.dict_snap.keys())
-            for jout in keys:
-                istep = out2step(jout, self.p.nout, self.p.nstep)
-                if(istep > cstep):
-                    self.dict_snap[jout].clear()
-                    del self.dict_snap[jout]
-                    self.print(f"[flush] snapshot at {jout} is also released", level='info')
-            gc.collect()
-        
-        self.memory = GB()
-        if(self.memory > self.p.flushGB):
-            keys = list(self.dict_gals.keys())
-            if(iout in keys):
-                self.dict_gals[iout] = {}
-                del self.dict_gals[iout]
-                self.print(f"[flush] gals at {iout} is released", level='info')
-            # keys = list(self.dict_gals.keys())
-            # for jout in keys:
-            #     istep = out2step(jout, self.p.nout, self.p.nstep)
-            #     if(istep > cstep):
-            #         self.dict_gals[jout] = {}
-            #         del self.dict_gals[jout]
-            #         self.print(f"[flush] gals at {jout} is also released", level='info')
-            gc.collect()
-        
-        self.memory = GB()
-        if(self.memory > self.p.flushGB):
-            keys = list(self.part_halo_match.keys())
-            if(iout in keys):
+            if(iout in self.part_halo_match.keys()):
                 partmatch = self.part_halo_match[iout]
                 if len(partmatch)>0:
                     if not os.path.isfile(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout}_partmatch.pkl"):
                         pklsave(partmatch, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout}_partmatch.pkl")
-                        self.print(f"[flush] partmatch at {iout} is dumped", level='info')
+                        self.print(f"[flush #2] partmatch at {iout} is dumped", level='info')
                     else:
-                        self.print(f"[flush] partmatch at {iout} is released", level='info')
+                        self.print(f"[flush #2] partmatch at {iout} is released", level='info')
                     self.part_halo_match[iout] = np.array([], dtype=int)
-            # keys = list(self.part_halo_match.keys())
-            # for jout in keys:
-            #     istep = out2step(jout, self.p.nout, self.p.nstep)
-            #     if(istep > cstep):
-            #         partmatch = self.part_halo_match[jout]
-            #         if len(partmatch)>0:
-            #             if not os.path.isfile(f"{self.p.resultdir}/by-product/{self.p.logprefix}{jout}_partmatch.pkl"):
-            #                 pklsave(partmatch, f"{self.p.resultdir}/by-product/{self.p.logprefix}{jout}_partmatch.pkl")
-            #                 self.print(f"[flush] partmatch at {jout} is also dumped", level='info')
-            #             else:
-            #                 self.print(f"[flush] partmatch at {jout} is also released", level='info')
-            #             self.part_halo_match[jout] = np.array([], dtype=int)
-            partmatch = None
-            gc.collect()
-        
-        self.memory = GB()
-        if(self.memory > self.p.flushGB):
-            keys = list(self.dict_leaves[iout].keys())
-            for key in keys:
-                leaf:Leaf = self.dict_leaves[iout][key]
-                if leaf is None:
-                    assert os.path.isfile(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout}_leaf_{key}.pkl")
-                    self.print(f"[flush] Leaf{key} at {iout} is released", level='info')
-                else:
-                    temp={}
-                    if(os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout}_leaf_{key}.pkl")):
-                        temp = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout}_leaf_{key}.pkl")
-                    backup = leaf.selfsave(backup=temp)
-                    pklsave(backup, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout}_leaf_{key}.pkl", overwrite=True)
-                    self.print(f"[flush] Leaf{key} at {iout} is dumped", level='info')
-                self.dict_leaves[iout][key] = None
-            leaf = None
-            gc.collect()
-
-        if leafclear:
-            keys = list(self.dict_leaves.keys())
-            for jout in keys:
-                istep = out2step(jout, self.p.nout, self.p.nstep)
-                if(jout==iout)or(istep > cstep):
-                    keys2 = list(self.dict_leaves[jout].keys())
-                    for key in keys2:
-                        if(self.dict_leaves[jout][key] is not None):self.dict_leaves[jout][key].clear()
-                        del self.dict_leaves[jout][key]
-                        if os.path.isfile(f"{self.p.resultdir}/by-product/{self.p.logprefix}{jout}_leaf_{key}.pkl"):
-                            os.remove(f"{self.p.resultdir}/by-product/{self.p.logprefix}{jout}_leaf_{key}.pkl")
-                            self.print(f"[flush_clear] Dumped leaf{key} at {jout} is removed", level='info')
-                    del self.dict_leaves[jout]
-                    self.print(f"[flush_clear] Leaves at {jout} are released", level='info')
-            
-            keys = list(self.part_halo_match.keys())
-            for jout in keys:
-                istep = out2step(jout, self.p.nout, self.p.nstep)
-                if(jout==iout)or(istep > cstep):
-                    self.part_halo_match[jout] = np.array([])
-                    del self.part_halo_match[jout]
-                    if os.path.isfile(f"{self.p.resultdir}/by-product/{self.p.logprefix}{jout}_partmatch.pkl"):
-                        os.remove(f"{self.p.resultdir}/by-product/{self.p.logprefix}{jout}_partmatch.pkl")
-                        self.print(f"[flush_clear] Dumped partmatch at {jout} is removed", level='info')
-                    self.print(f"[flush_clear] partmatch at {jout} is released", level='info')
-                    
-            keys = list(self.dict_pure)
-            for jout in keys:
-                istep = out2step(jout, self.p.nout, self.p.nstep)
-                if(istep > cstep):
-                    self.dict_pure[jout] = ...
-                    del self.dict_pure[jout]
-                    self.print(f"[flush_clear] dict_pure at {jout} is released", level='info')
-                
+                partmatch = None
+            if(iout in self.dict_leaves.keys()):
+                keys = list(self.dict_leaves[iout].keys())
+                for key in keys:
+                    leaf:Leaf = self.dict_leaves[iout][key]
+                    if(leaf is None):
+                        assert os.path.isfile(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout}_leaf_{key}.pkl")
+                        self.print(f"[flush #2] Leaf{key} at {iout} is released", level='info')
+                    else:
+                        temp={}
+                        if(os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout}_leaf_{key}.pkl")):
+                            temp = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout}_leaf_{key}.pkl")
+                        backup = leaf.selfsave(backup=temp)
+                        pklsave(backup, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout}_leaf_{key}.pkl", overwrite=True)
+                        self.print(f"[flush #2] Leaf{key} at {iout} is dumped", level='info')
+                    self.dict_leaves[iout][key] = None
+                leaf = None                
         gc.collect()
         self.memory = GB()
 
@@ -473,6 +443,7 @@ class TreeBase:
                 count += 1
             pklsave(gals, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}.pickle", overwrite=True)
             self.print(f"{prefix2} Save `{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}.pickle`", level=level)
+            self.out_of_use.append(iout)
             os.remove(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp.pickle")
             self.print(f"{prefix2} Remove `{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp.pickle`", level=level)
             del gals
