@@ -206,7 +206,13 @@ class TreeBase:
                         self.banned_list.append(iout)
                     else:
                         gal = self.load_gals(iout, galid, prefix=prefix)
-                        if gal['mcontam']/gal['m'] <= self.p.fcontam:
+                        go = False
+                        if(self.p.galaxy):
+                            go=True
+                        else:
+                            if gal['mcontam']/gal['m'] <= self.p.fcontam:
+                                go=True
+                        if(go):
                             part = uhmi.HaloMaker.read_member_part(snap, galid, galaxy=self.p.galaxy, full_path=self.p.fullpath, usefortran=self.p.usefortran)
                             ileaf = Leaf(self, gal, part, backup=backup)
                             if not ileaf.contam:
@@ -214,6 +220,10 @@ class TreeBase:
             _load_leaf(self, iout, galid, backup=backup, backups=backups, prefix=prefix, level=level, verbose=verbose+1)
             self.memory = GB()
         if galid in self.dict_leaves[iout].keys():
+            # [Debugging]
+            # if(iout==186)and(galid==1):
+            #     msg = self.dict_leaves[iout][galid].summary()
+            #     self.print(msg)
             return self.dict_leaves[iout][galid]
     
     @_debug
@@ -371,10 +381,12 @@ class TreeBase:
             ileaf:Leaf = self.load_leaf(iout, key, prefix=prefix, level=level, verbose=verbose+1)
             # Calc, or not?
             calc = True
-            if(ileaf.prog is not None):
-                if(jout in ileaf.prog[:,0]): calc=False
-            if(ileaf.desc is not None):
-                if(jout in ileaf.desc[:,0]): calc=False
+            if(jout>iout):
+                if(ileaf.desc is not None):
+                    if(jout in ileaf.desc[:,0]): calc=False
+            if(jout<iout):
+                if(ileaf.prog is not None):
+                    if(jout in ileaf.prog[:,0]): calc=False
 
             # Main calculation
             if calc:
@@ -497,7 +509,7 @@ class TreeBase:
             if (backup is None) and (os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout}_leaf_{galid}.pkl")):
                 backup = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout}_leaf_{galid}.pkl")
             self.load_leaf(iout, galid, backup=backup, backups=leaves, prefix=prefix, verbose=verbose+1)
-            if(not self.p.loadall):
+            if(self.p.loadall):
                 break
         self.flush(iout, prefix=prefix)
         leaves = None; del leaves
@@ -622,6 +634,29 @@ class Leaf:
         return self._name
     def __str__(self):
         return self._name
+
+    def summary(self):
+        t1 = f"[Leaf Summary] {self._name} ({self.changed}))"
+        t2 = f"\t{self.nparts} particles"
+        t3 = f"Progenitors:"
+        if(self.prog is not None):
+            temp = []
+            for prog,pscore in zip(self.prog, self.prog_score):
+                temp += f"\t\t{prog[0]*100000+prog[1]} ({pscore[0]:.4f})\n"
+            t4 = "".join(temp)        
+        else:
+            t4 = "\t\tNone"
+        t5 = f"Descendants:"
+        if(self.desc is not None):
+            temp = []
+            for desc,dscore in zip(self.desc, self.desc_score):
+                temp += f"\t\t{desc[0]*100000+desc[1]} ({dscore[0]:.4f})\n"
+            t6 = "".join(temp)
+        else:
+            t6 = "\t\tNone"
+        return f"\n{t1}\n{t2}\n{t3}\n{t4}\n{t5}\n{t6}"
+
+        
     
     def clear(self):
         self.cat = None

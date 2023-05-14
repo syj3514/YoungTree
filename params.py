@@ -24,7 +24,7 @@ nice = 1
 #       False:    Use halo and DM
 galaxy = True
 fullpath=None
-loadall = True
+loadall = False
 usefortran = False
 
 #   [nsnap]
@@ -50,7 +50,7 @@ detail = False
 ontime = True # Time check
 onmem = False # Memory check
 oncpu = False # CPU check
-verbose = 1
+verbose = 5
 
 #   [flushGB]
 #   Memory threshold for auto-flush in Gigabytes

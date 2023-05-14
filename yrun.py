@@ -102,11 +102,10 @@ def do_onestep(Tree:'TreeBase', iout:int, reftot:float=time.time()):
                 jstep = istep+j+1
                 if jstep <= np.max(nstep):
                     jout = Tree.step2out(jstep)
-                    if not jout in Tree.dict_snap.keys():
-                        Tree.logger.info(f"\n\nDescendant at jout={jout}\n")
-                        Tree.leaf_read(jout, level='info', verbose=0)
-                        Tree.logger.info("\n")
-                        Tree.find_cands(iout, jout, level='info')
+                    Tree.logger.info(f"\n\nDescendant at jout={jout}\n")
+                    Tree.leaf_read(jout, level='info', verbose=0)
+                    Tree.logger.info("\n")
+                    Tree.find_cands(iout, jout, level='info')
             Tree.logger.info(f"\n\n")
             
             # Flush redundant snapshots
