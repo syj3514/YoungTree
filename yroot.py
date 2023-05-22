@@ -103,10 +103,10 @@ class TreeBase:
                 snap = uri.RamsesSnapshot(self.p.repo, iout, mode=self.p.rurmode, path_in_repo=path_in_repo)
                 if(self.p.loadall)and(not iout in self.banned_list):
                     if(self.p.mode[0]=='y')or(self.p.mode=='nh'):
-                        snap.get_part(nthread=self.p.ncpu, target_fields=["x","y","z","vx","vy","vz","m","epoch","id","cpu"])
+                        snap.get_part(pname=self.partstr, python=(not self.p.usefortran), nthread=self.p.ncpu, target_fields=["x","y","z","vx","vy","vz","m","epoch","id","cpu"])
                     else:
-                        snap.get_part(nthread=self.p.ncpu, target_fields=["x","y","z","vx","vy","vz","m","epoch","id","cpu","family"])
-                    parts = snap.part[self.partstr]
+                        snap.get_part(pname=self.partstr, python=(not self.p.usefortran), nthread=self.p.ncpu, target_fields=["x","y","z","vx","vy","vz","m","epoch","id","cpu","family"])
+                    parts = snap.part
                     arg = np.argsort(np.abs(parts['id']))
                     parts = parts[arg]
                     if not (parts.ptype == self.partstr): parts.ptype = self.partstr
@@ -466,20 +466,23 @@ class TreeBase:
     def leaf_write(self, prefix="", level='info', verbose=0):
         iouts = list(self.dict_leaves.keys())
         for iout in iouts:
-            prefix2 = f"[leaf_write]({iout})"
+            if(iout in self.out_of_use):
+                continue
+            if not (os.path.isfile(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}.pickle")):
+                prefix2 = f"[leaf_write]({iout})"
 
-            keys = list(self.dict_leaves[iout].keys())
-            leaves = {}
-            if os.path.isfile(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp.pickle"):
-                leaves = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp.pickle")
-                self.print(f"{prefix2} Overwrite `{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp.pickle`", level=level)
-            for key in keys:
-                leaf = self.load_leaf(iout, key, prefix=prefix, level=level, verbose=verbose+1)
-                if leaf.changed:
-                    backup = leaves[key] if(key in leaves.keys()) else {}
-                    leaves[key] = leaf.selfsave(backup=backup)
-            pklsave(leaves, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp.pickle", overwrite=True)
-            del leaves
+                keys = list(self.dict_leaves[iout].keys())
+                leaves = {}
+                if os.path.isfile(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp.pickle"):
+                    leaves = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp.pickle")
+                for key in keys:
+                    leaf = self.load_leaf(iout, key, prefix=prefix, level=level, verbose=verbose+1)
+                    if leaf.changed:
+                        backup = leaves[key] if(key in leaves.keys()) else {}
+                        leaves[key] = leaf.selfsave(backup=backup)
+                pklsave(leaves, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp.pickle", overwrite=True)
+                self.print(f"{prefix2} Write `{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp.pickle`", level=level)
+                del leaves
 
     @_debug
     def leaf_read(self, iout:int, prefix="", level='info', verbose=0):

@@ -115,8 +115,8 @@ def do_onestep(Tree:'TreeBase', iout:int, reftot:float=time.time()):
                 outs = list(Tree.dict_leaves.keys())
                 for out in outs:
                     if out > cutout:
-                        Tree.flush(out, leafclear=True, level='info')        
                         Tree.finalize(out, level='info')
+                        Tree.flush(out, leafclear=True, level='info')        
             
             # Backup files
             Tree.leaf_write(level='info')
@@ -299,7 +299,8 @@ def connect(p:DotDict, logger:logging.Logger):
                                         logger.debug(f"\t\t{idesc} change original fat {dhalo['fat']} ({dhalo['fat_score']:.4f}) to {-prog} ({pscore:.4f})")
                                         dhalo['fat'] = -prog
                                         dhalo['fat_score'] = pscore
-                                    
+        pklsave(inst, f"{p.resultdir}/{p.logprefix}stage_1.pickle", overwrite=True)
+        logger.info(f"`{p.resultdir}/{p.logprefix}stage_1.pickle` saved\n")                                    
 
         logger.info("Connect same Last...")
         for iout in p.nout:
@@ -315,6 +316,8 @@ def connect(p:DotDict, logger:logging.Logger):
                     prog = gethalo(gal['fat'], halos=inst, complete=complete)
                     if(np.abs(prog['son']) == gal2id(gal)):
                         prog['last'] = last
+        pklsave(inst, f"{p.resultdir}/{p.logprefix}stage_2.pickle", overwrite=True)
+        logger.info(f"`{p.resultdir}/{p.logprefix}stage_2.pickle` saved\n")                                    
 
         logger.info("Connect same From...")
         for iout in p.nout[::-1]:
@@ -330,12 +333,16 @@ def connect(p:DotDict, logger:logging.Logger):
                     desc = gethalo(gal['son'], halos=inst, complete=complete)
                     if np.abs(desc['fat']) == gal2id(gal):
                         desc['from'] = From
+        pklsave(inst, f"{p.resultdir}/{p.logprefix}stage_3.pickle", overwrite=True)
+        logger.info(f"`{p.resultdir}/{p.logprefix}stage_3.pickle` saved\n")                                    
     
         logger.info("Recover catalogue from dictionary...")
         gals = None
         for iout in p.nout:
             iinst = inst[iout]
             gals = iinst if gals is None else np.hstack((gals, iinst))
+        pklsave(gals, f"{p.resultdir}/{p.logprefix}stage_4.pickle", overwrite=True)
+        logger.info(f"`{p.resultdir}/{p.logprefix}stage_4.pickle` saved\n")                                    
     
         logger.info("Find fragmentation...")
         # 1) Pick up each branch based on `from`
@@ -353,7 +360,7 @@ def connect(p:DotDict, logger:logging.Logger):
                 # However, they have same last
                 if pgal['last'] == first['last']:
                     ### (i) is fragmented from (p)
-                    feedback.append( (From, first['last'], -pfirst['from'], pfirst['last']) )
+                    feedback.append( (From, first['last'], -np.abs(pfirst['from']), pfirst['last']) )
                 # They have different last
                 else:
                     # pfirst is broken before first --> connect two branches
@@ -361,19 +368,38 @@ def connect(p:DotDict, logger:logging.Logger):
                     # (i)                         [ifrom]------[ilast]
                     ### (i) is descendant of (p)
                     if pfirst['last']//100000 < first['timestep']:
-                        feedback.append( (From, first['last'], pfirst['from'], first['last']) )
-                        feedback.append( (pfirst['from'], pfirst['last'], pfirst['from'], first['last']) )
+                        feedback.append( (From, first['last'], np.abs(pfirst['from']), first['last']) )
+                        feedback.append( (pfirst['from'], pfirst['last'], np.abs(pfirst['from']), first['last']) )
                     # pfirst is broken after first
                     # (p) [pfrom]----------------------[plast]
                     # (i)            [ifrom]---------------[ilast]
                     ### (i) is fragmented from (p)
                     else:
-                        feedback.append( (From, first['last'], -pfirst['from'], first['last']) )
+                        feedback.append( (From, first['last'], -np.abs(pfirst['from']), first['last']) )
         From = np.copy(gals['from'])
         Last = np.copy(gals['last'])
         for feed in feedback:
-            From[(From==feed[0])&(Last==feed[1])] = feed[2]
-            Last[(From==feed[0])&(Last==feed[1])] = feed[3]
+            ind = (From==feed[0])&(Last==feed[1])
+            if(True in ind):
+                From[(From==feed[0])&(Last==feed[1])] = feed[2]
+                Last[(From==feed[0])&(Last==feed[1])] = feed[3]
+        From_old = [irow[0] for irow in feedback]
+        Last_old = [irow[1] for irow in feedback]
+        mask1 = np.isin(From, From_old)
+        mask2 = np.isin(Last, Last_old)
+        mask = mask1&mask2
+        ncall = 1
+        while(True in mask):
+            for feed in feedback:
+                ind = (From==feed[0])&(Last==feed[1])
+            if(True in ind):
+                From[(From==feed[0])&(Last==feed[1])] = feed[2]
+                Last[(From==feed[0])&(Last==feed[1])] = feed[3]
+            ncall+=1
+            if(ncall>10):
+                logger.warning("Too many calls to find fragmentation. Stop.")
+                break
+            
         gals['from'] = From
         gals['last'] = Last
         pklsave(gals, f"{p.resultdir}/{p.logprefix}stable.pickle", overwrite=True)
