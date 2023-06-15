@@ -65,6 +65,8 @@ def make_params_dict(fname:str, mode=None) -> None:
     params = importlib.import_module(param_name)
     p = {}
     for key in params.__dict__.keys():
+        if(key in dir(p))or(key[0]=="_"):
+            continue
         p[key] = params.__dict__[key]
     mode = p['mode'] if mode is None else mode
     p['mode'] = mode
