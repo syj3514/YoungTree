@@ -85,6 +85,7 @@ class TreeBase:
         self.onmem = self.p.onmem
         self.oncpu = self.p.oncpu
         self.memory = GB()
+        self.print("TreeBase initialized.", level='info')
     
     def print(self, msg:str, level='debug'):
         if self.logger is None:
@@ -106,13 +107,15 @@ class TreeBase:
                         snap.get_part(pname=self.partstr, python=(not self.p.usefortran), nthread=self.p.ncpu, target_fields=["x","y","z","vx","vy","vz","m","epoch","id","cpu"])
                     else:
                         snap.get_part(pname=self.partstr, python=(not self.p.usefortran), nthread=self.p.ncpu, target_fields=["x","y","z","vx","vy","vz","m","epoch","id","cpu","family"])
-                    parts = snap.part
-                    arg = np.argsort(np.abs(parts['id']))
-                    parts = parts[arg]
-                    if not (parts.ptype == self.partstr): parts.ptype = self.partstr
-                    snap.part = parts
+                    snap.part.table = snap.part.table[np.argsort(np.abs(snap.part.table['id']))] # <- __copy__
+                    snap.part.extra_fields = None
+                    del snap.part.extra_fields
+                    if(snap.part.ptype != self.partstr): snap.part.ptype = self.partstr
                     snap.part_data = np.array([])
+                    snap.flush()
+                del snap.cell_extra, snap.part_extra
                 self.dict_snap[iout] = snap
+                del snap
             _load_snap(self, iout, prefix=prefix, level=level, verbose=verbose)
         self.memory = GB()
         return self.dict_snap[iout]
@@ -130,9 +133,10 @@ class TreeBase:
                     @_debug
                     def __load_gals(self, snap:uri.RamsesSnapshot, galid=None, prefix="", level='info', verbose=1):
                         gm, gpids = uhmi.HaloMaker.load(snap, galaxy=self.p.galaxy, double_precision=self.p.dp, load_parts=True, full_path=self.p.fullpath)
-                        haloids = np.repeat(gm['id'], gm['nparts'])
-                        self.part_halo_match[snap.iout] = np.zeros(np.max(gpids), dtype=int)
-                        self.part_halo_match[snap.iout][gpids-1] = haloids
+                        tmp = np.repeat(gm['id'], gm['nparts'])
+                        self.part_halo_match[snap.iout] = np.zeros(np.max(gpids), dtype=np.int32)
+                        self.part_halo_match[snap.iout][gpids-1] = tmp
+                        del gpids, tmp
                         return gm
                     gm = __load_gals(self, snap, galid=galid, prefix=prefix, level=level, verbose=verbose+1)
                 else:
@@ -141,6 +145,7 @@ class TreeBase:
                     mask = gm['mcontam']/gm['m'] <= self.p.fcontam
                     self.dict_pure[iout] = mask
                 self.dict_gals[iout] = gm
+                del snap
             _load_gals(self, iout,galid=galid, prefix=prefix, level=level, verbose=verbose)
         self.memory = GB()
         # Load
@@ -166,15 +171,20 @@ class TreeBase:
         else:
             raise ValueError(f"Cannot find a key `{iout}` in `part_halo_match`!")
             
-
-
     def load_leaf(self, iout:int, galid:int, backup:dict=None, backups=None, prefix="", level='debug', verbose=0)->'Leaf':
         calc = False
+        switch = False
         if not galid in self.dict_leaves[iout].keys():
             calc=True
         else:
             if self.dict_leaves[iout][galid] is None:
                 calc=True
+            else:
+                if(self.dict_leaves[iout][galid].cat is None):
+                    calc=True
+                    if(self.p.loadall):
+                        switch=True
+                        self.p.loadall = False
         if(calc):
             @_debug
             def _load_leaf(self, iout:int, galid:int, backup:dict=None, backups=None, prefix="", level='debug', verbose=verbose+1):
@@ -190,35 +200,36 @@ class TreeBase:
                     if self.p.loadall:
                         gals = self.load_gals(iout, galid='all')
                         if(not self.p.galaxy): gals = gals[ self.dict_pure[iout] ]
-                        parts = snap.part
                         partmatch = self.read_part_halo_match(iout)
                         for igal in gals:
                             if(backups is not None):
-                                backup = backups[igal['id']]
-                                part = None
-                            else:
-                                pind = np.where(partmatch == igal['id'])[0]
-                                part = parts[pind]
-                            ileaf = Leaf(self, igal, part, backup=backup)
-                            if not ileaf.contam:
+                                ileaf = Leaf(self, igal, None,None, backup=backups[igal['id']])
                                 self.dict_leaves[iout][igal['id']] = ileaf
+                            else:
+                                ileaf = Leaf(self, igal, snap.part.table[np.where(partmatch == igal['id'])[0]], snap, backup=backup) # <- __copy__
+                                if(not ileaf.contam):
+                                    self.dict_leaves[iout][igal['id']] = ileaf
+                            del ileaf
                         snap.clear()
+                        # self.dict_gals[iout] = np.array([])
+                        del partmatch, gals
                         self.banned_list.append(iout)
                     else:
                         gal = self.load_gals(iout, galid, prefix=prefix)
-                        go = False
-                        if(self.p.galaxy):
-                            go=True
-                        else:
-                            if gal['mcontam']/gal['m'] <= self.p.fcontam:
-                                go=True
+                        go=True
+                        if(not self.p.galaxy):
+                            if(gal['mcontam']/gal['m'] > self.p.fcontam):
+                                go=False
                         if(go):
                             part = uhmi.HaloMaker.read_member_part(snap, galid, galaxy=self.p.galaxy, full_path=self.p.fullpath, usefortran=self.p.usefortran)
-                            ileaf = Leaf(self, gal, part, backup=backup)
+                            ileaf = Leaf(self, gal, part.table, snap, backup=backup)
                             if not ileaf.contam:
                                 self.dict_leaves[iout][galid]=ileaf
+                            del ileaf, part
+                    del snap
             _load_leaf(self, iout, galid, backup=backup, backups=backups, prefix=prefix, level=level, verbose=verbose+1)
             self.memory = GB()
+            if(switch): self.p.loadall = True
         if galid in self.dict_leaves[iout].keys():
             # [Debugging]
             # if(iout==186)and(galid==1):
@@ -245,13 +256,12 @@ class TreeBase:
         keys = list(self.dict_gals.keys())
         for jout in keys:
             if(jout in self.out_of_use):
-                self.dict_gals[jout] = {}
+                # self.dict_gals[jout] = {}
                 del self.dict_gals[jout]
                 self.print(f"[flush #1] gals at {jout} is released", level='info')
         keys = list(self.part_halo_match.keys())
         for jout in keys:
             if(jout in self.out_of_use):
-                self.part_halo_match[jout] = []
                 del self.part_halo_match[jout]
                 if os.path.isfile(f"{self.p.resultdir}/by-product/{self.p.logprefix}{jout}_partmatch.pkl"):
                     os.remove(f"{self.p.resultdir}/by-product/{self.p.logprefix}{jout}_partmatch.pkl")
@@ -260,7 +270,7 @@ class TreeBase:
         keys = list(self.dict_pure)
         for jout in keys:
             if(jout in self.out_of_use):
-                self.dict_pure[jout] = []
+                # self.dict_pure[jout] = []
                 del self.dict_pure[jout]
                 self.print(f"[flush #1] dict_pure at {jout} is released", level='info')
         keys = list(self.dict_leaves.keys())
@@ -314,13 +324,36 @@ class TreeBase:
         gc.collect()
         
         # For each isnap, How many particles
-        temp = [f"\t{key}: {(sys.getsizeof(self.dict_snap[key].part_data)+sys.getsizeof(self.dict_snap[key].part)) / 2**20:.2f} MB\n" for key in self.dict_snap.keys()]
+        temp = []
+        for key in self.dict_snap.keys():
+            val = sys.getsizeof(self.dict_snap[key])
+            val += self.dict_snap[key].part_data.nbytes if(self.dict_snap[key].part_data is not None) else 0
+            val += self.dict_snap[key].part.nbytes if(self.dict_snap[key].part is not None) else 0
+            temp.append(f"\t{key}: {val / 2**20:.2f} MB\n")
         tsnap = "".join(temp)
 
         # For each iout, How many leaves
         temp = []
         for key in self.dict_leaves.keys():
-            temp += f"\t{key}: {len(self.dict_leaves[key])} leaves\n"
+            idkeys = list(self.dict_leaves[key].keys())
+            ndump = 0
+            val = sys.getsizeof(self.dict_leaves[key])
+            for idkey in idkeys:
+                ileaf = self.dict_leaves[key][idkey]
+                if(ileaf is not None):
+                    val += ileaf.size()
+                else:
+                    ndump += 1
+            temp.append(f"\t{key}: {len(idkeys)-ndump} leaves ({ndump} dumped) {val / 2**20:.2f} MB\n")
+            # if(self.dict_leaves[key][idkeys[0]] is None):
+            #     # Check dumped
+            #     ndump = 0
+            #     for idkey in idkeys:
+            #         if(os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{key}_leaf_{idkey}.pkl")):
+            #             ndump += 1
+            #     temp += f"\t{key}: {len(idkeys)-ndump} leaves ({ndump} leaves are dumped)\n"
+            # else:
+            #     temp += f"\t{key}: {len(idkeys)} leaves\n"
         tleaf = "".join(temp)        
 
         # For each iout, How many matched particles
@@ -328,12 +361,12 @@ class TreeBase:
         for key in self.part_halo_match.keys():
             leng = len(self.part_halo_match[key])
             if(leng>0):
-                temp += f"\t{key}: {leng} matched parts\n"
+                temp.append(f"\t{key}: {leng} matched parts ({self.part_halo_match[key].nbytes / 2**20:.2f} MB)\n")
             else:
                 if(os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{key}_partmatch.pkl")):
-                    temp += f"\t{key}: matched parts are dumped\n"
+                    temp.append(f"\t{key}: matched parts are dumped\n")
                 else:
-                    temp += f"\t{key}: no matched parts\n"
+                    temp.append(f"\t{key}: no matched parts\n")
         tmatch = "".join(temp)
         
         text = f"\n[Tree Data Report]\n\n>>> Snaps\n{tsnap}>>> Leaves\n{tleaf}>>> Matched particles\n{tmatch}\n>>> Used Memory: {GB():.4f} GB\n"
@@ -570,14 +603,14 @@ class Leaf:
     __slots__ = ['backupstr', 'changed', 'cat', 'id', 'iout', '_name', 'base', 'logger',
                  'contam', 'changed', 'nparts', 'pid', 'pvx', 'pvy', 'pvz', 'pweight',
                  'prog', 'prog_score', 'desc', 'desc_score', 'saved_matchrate', 'saved_veloffset']
-    def __init__(self, base:TreeBase, gal:np.ndarray, parts:uri.Particle, backup:dict=None, prefix:str=None, **kwargs):
+    def __init__(self, base:TreeBase, gal:np.ndarray, parts:np.ndarray, snap:uri.RamsesSnapshot, backup:dict=None, prefix:str=None, **kwargs):
         backupstr = "w/o backup"
         self.changed = True
         if backup is not None:
             backupstr = "w/ backup"
             gal = backup['gal']          
             self.changed = False
-        self.cat = copy.deepcopy(gal)
+        self.cat = gal
         self.id:int = self.cat['id']
         self.iout:int = self.cat['timestep']
         self._name = f"L{self.id} at {self.iout}"
@@ -587,15 +620,13 @@ class Leaf:
         try:
             if self.cat['mcontam']/self.cat['m'] > self.base.p.fcontam:
                 self.contam = True
-            else:
-                pass
             self._name = f"L{self.id} at {self.iout} ({int(100*self.cat['mcontam']/self.cat['m'])}%)"
         except:
             pass
         
         # Mem part
         if not self.contam:
-            if backup is not None:
+            if(backup is not None):
                 self.nparts = backup['part']['nparts']
                 self.pid = backup['part']['id']
                 self.pvx = backup['part']['vx']
@@ -603,20 +634,23 @@ class Leaf:
                 self.pvz = backup['part']['vz']
                 self.pweight = backup['part']['weight']
             else:
-                self.nparts = len(parts['id'])
-                self.pid:np.ndarray[int] = np.abs(parts['id']) if self.base.p.galaxy else parts['id']
-                self.pvx:np.ndarray[float] = parts['vx', 'km/s']
-                self.pvy:np.ndarray[float] = parts['vy', 'km/s']
-                self.pvz:np.ndarray[float] = parts['vz', 'km/s']
-                dist = distance(gal, parts)
+                part = np.array(parts)
+                del parts
+                self.nparts = len(part)
+                self.pid:np.ndarray[int] = np.abs(part['id']) if self.base.p.galaxy else part['id']
+                self.pvx:np.ndarray[float] = part['vx']/snap.unit['km/s']#, 'km/s']
+                self.pvy:np.ndarray[float] = part['vy']/snap.unit['km/s']#, 'km/s']
+                self.pvz:np.ndarray[float] = part['vz']/snap.unit['km/s']#, 'km/s']
+                dist = distance(self.cat, part)
                 dist /= np.std(dist)
-                vels = distance3d(gal['vx'], gal['vy'], gal['vz'], self.pvx, self.pvy, self.pvz)
+                vels = distance3d(self.cat['vx'], self.cat['vy'], self.cat['vz'], self.pvx, self.pvy, self.pvz)
                 vels /= np.std(vels)
-                self.pweight:np.ndarray[float] = parts['m'] / np.sqrt(dist**2 + vels**2)
+                self.pweight:np.ndarray[float] = part['m'] / np.sqrt(dist**2 + vels**2)
                 self.pweight /= np.sum(self.pweight)
+                del part
 
             # Progenitor & Descendant
-            if backup is not None:
+            if(backup is not None):
                 self.prog = self.cat['prog']
                 self.prog_score = self.cat['prog_score']
                 self.desc = self.cat['desc']
@@ -631,12 +665,27 @@ class Leaf:
                 self.saved_matchrate = {}
                 self.saved_veloffset = {}
     
+    # def __del__(self):
+    #     print(f"Delete {self._name}, {id(self)}")
+
     def name(self):
         return self._name
     def __repr__(self):
         return self._name
     def __str__(self):
         return self._name
+    def size(self):
+        val = sys.getsizeof(self)
+        # Add array
+        attrs = ['pid', 'pvx', 'pvy', 'pvz', 'pweight', 'prog', 'prog_score', 'desc', 'desc_score']
+        for iattr in attrs:
+            arr = getattr(self, iattr)
+            val += 0 if(arr is None) else arr.nbytes
+        # Add dictionary
+        for key_iout in self.saved_matchrate.keys():
+            for key_id in self.saved_matchrate[key_iout].keys():
+                val += 0 if(self.saved_matchrate[key_iout][key_id] is None) else self.saved_matchrate[key_iout][key_id][1].nbytes
+        return val
 
     def summary(self):
         t1 = f"[Leaf Summary] {self._name} ({self.changed}))"
@@ -660,22 +709,21 @@ class Leaf:
         return f"\n{t1}\n{t2}\n{t3}\n{t4}\n{t5}\n{t6}"
 
         
-    
     def clear(self):
-        self.cat = None
+        del self.cat; self.cat = None
         if not self.contam:
-            self.nparts = 0
-            self.pid = None
-            self.pvx = None
-            self.pvy = None
-            self.pvz = None
-            self.pweight = None
-            self.saved_matchrate = {}
-            self.saved_veloffset = {}    
-            self.prog = []    
-            self.prog_score = []    
-            self.desc = []    
-            self.desc_score = []    
+            del self.nparts; self.nparts = 0
+            del self.pid; self.pid = np.array([])
+            del self.pvx; self.pvx = np.array([])
+            del self.pvy; self.pvy = np.array([])
+            del self.pvz; self.pvz = np.array([])
+            del self.pweight; self.pweight = None
+            del self.saved_matchrate; self.saved_matchrate = {}
+            del self.saved_veloffset; self.saved_veloffset = {}    
+            del self.prog; self.prog = None
+            del self.prog_score; self.prog_score = None    
+            del self.desc; self.desc = None    
+            del self.desc_score; self.desc_score = None    
 
     def selfsave(self, backup={}) -> dict:
         # Save GalaxyMaker
@@ -687,7 +735,7 @@ class Leaf:
                 arr['desc'] = self.desc
                 arr['desc_score'] = self.desc_score
             else:
-                backup_keys = ["nparts", "id", "timestep", "aexp", "m", "x", "y", "z", "vx", "vy", "vz", "r", "rvir", "mvir"]
+                backup_keys = ["nparts", "id", "timestep", "host", "aexp", "m", "x", "y", "z", "vx", "vy", "vz", "r", "rvir", "mvir"]
                 lis = [ia for ia,ib in zip(self.cat, self.cat.dtype.names) if ib in backup_keys] + [self.prog] + [self.prog_score] + [self.desc] + [self.desc_score]
                 dtype = np.dtype([idtype for idtype in self.cat.dtype.descr if idtype[0] in backup_keys] + [('prog','O'), ("prog_score",  'O'), ('desc','O'), ("desc_score",  'O')])
                 arr = np.empty(1, dtype=dtype)[0]

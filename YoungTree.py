@@ -1,7 +1,7 @@
 import sys
 import importlib
 from ytool import *
-from yrun import make_log, do_onestep, connect, gather, DebugDecorator
+from yrun import make_log, do_onestep, connect, gather, DebugDecorator, build_branch
 import yroot
 import time
 from numba import set_num_threads
@@ -36,39 +36,57 @@ if __name__=='__main__':
         os.mkdir(f"{params.resultdir}/log")
     try:
         if not os.path.isfile(f"{params.resultdir}/{params.logprefix}stable.pickle"):
-            if not os.path.isfile(f"{params.resultdir}/{params.logprefix}all.pickle"):
-                if not os.path.isfile(f"{params.resultdir}/by-product/{params.logprefix}checkpoint.pickle"):
-                    treebase = yroot.TreeBase(params, logger=mainlog)
-                    
-                    reftime = time.time()
-                    for iout in params.nout:
-                        do_onestep(treebase, iout, reftot=reftime)
-                        if treebase.memory > treebase.p.flushGB:
-                            treebase.flush(iout)
+            if not os.path.isfile(f"{params.resultdir}/{params.logprefix}fatson.pickle"):
+                if not os.path.isfile(f"{params.resultdir}/{params.logprefix}all.pickle"):
+                    if not os.path.isfile(f"{params.resultdir}/by-product/{params.logprefix}checkpoint.pickle"):
+                        if(not os.path.exists(f"{params.resultdir}/{params.logprefix}treebase.temp.pickle")):
+                            treebase = yroot.TreeBase(params, logger=mainlog)
+                            pklsave(treebase, f"{params.resultdir}/{params.logprefix}treebase.temp.pickle", overwrite=True)
+                            del treebase
+                        reftime = time.time()
 
-                    outs = list(treebase.dict_leaves.keys())
-                    for iout in outs:
-                        treebase.flush(iout, leafclear="True")
-                        treebase.finalize(iout)
-                    treebase.mainlog.info(f"\n{treebase.summary()}\n")
-                    
-                    pklsave(np.array([]), f"{params.resultdir}/by-product/{params.logprefix}checkpoint.pickle")
-                    treebase.mainlog.info("\nLeaf save Done\n"); print("\nLeaf save Done\n")
-                    treebase = None
-                    gc.collect()
+                        for iout in params.nout:
+                            os.system(f"python3 ysub.py {iout} {reftime} {params.resultdir} {params.logprefix}")
+                            if(os.path.isfile(f"{params.resultdir}/{params.logprefix}success.tmp")):
+                                os.remove(f"{params.resultdir}/{params.logprefix}success.tmp")
+                            else:
+                                raise RuntimeError("No success.tmp")
+                            time.sleep(1)
+                        # for iout in params.nout:
+                        #     do_onestep(treebase, iout, reftot=reftime)
+                        #     if treebase.memory > treebase.p.flushGB:
+                        #         treebase.flush(iout)
+                        treebase = pklload(f"{params.resultdir}/{params.logprefix}treebase.temp.pickle")
+                        # treebase.p = DotDict(treebase.p)
+                        outs = list(treebase.dict_leaves.keys())
+                        for iout in outs:
+                            treebase.flush(iout, leafclear="True")
+                            treebase.finalize(iout)
+                        treebase.mainlog.info(f"\n{treebase.summary()}\n")
+                        
+                        pklsave(np.array([]), f"{params.resultdir}/by-product/{params.logprefix}checkpoint.pickle")
+                        treebase.mainlog.info("\nLeaf save Done\n"); print("\nLeaf save Done\n")
+                        treebase = None
+                        del treebase
+                        os.remove(f"{params.resultdir}/{params.logprefix}treebase.temp.pickle")
+                        gc.collect()
 
-                func = DebugDecorator(gather, params=params, logger=mainlog)
-                func(params, mainlog)
-                mainlog.info("\nGather Done\n"); print("\nGather Done\n")
-                
-            
-            mainlog.info("\nConnect Start\n"); print("\nConnect Start\n")
-            connectlog, resultdir,_ = make_log(params.repo, "connect", detail=params.detail, prefix=params.logprefix)
-            
-            func = DebugDecorator(connect, params=params, logger=connectlog)
-            func(params, connectlog)
-            mainlog.info("\nConnect Done\n"); print("\nConnect Done\n")
-        
+                    func = DebugDecorator(gather, params=params, logger=mainlog)
+                    func(params, mainlog)
+                    mainlog.info("\nGather Done\n"); print("\nGather Done\n")
+                    
+                mainlog.info("\nConnect Start\n"); print("\nConnect Start\n")
+                connectlog, resultdir,_ = make_log(params.repo, "connect", detail=params.detail, prefix=params.logprefix)
+                func = DebugDecorator(connect, params=params, logger=connectlog)
+                func(params, connectlog)
+                mainlog.info("\nConnect Done\n"); print("\nConnect Done\n")
+
+            mainlog.info("\nBuild Start\n"); print("\nBuild Start\n")
+            buildlog, resultdir,_ = make_log(params.repo, "build", detail=params.detail, prefix=params.logprefix)
+            func = DebugDecorator(build_branch, params=params, logger=buildlog)
+            func(params, buildlog)
+            mainlog.info("\nBuild Done\n"); print("\nBuild Done\n")
+
         mainlog.info(f"\nYoungTree Done\nSee `{params.resultdir}/{params.logprefix}stable.pickle`"); print(f"\nYoungTree Done\nSee `{params.resultdir}/{params.logprefix}stable.pickle`")
     except Exception as e:
         print(); mainlog.error("")
