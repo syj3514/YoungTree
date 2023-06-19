@@ -117,7 +117,10 @@ def do_onestep(Tree:'TreeBase', iout:int, reftot:float=time.time()):
                 outs = list(Tree.dict_leaves.keys())
                 for out in outs:
                     if out > cutout:
-                        Tree.finalize(out, level='info')
+                        if(os.path.exists(f"{resultdir}/by-product/{Tree.p.logprefix}{out:05d}.pickle")):
+                            pass
+                        else:
+                            Tree.finalize(out, level='info')
                         Tree.flush(out, leafclear=True, level='info')        
             
             # Backup files
@@ -129,8 +132,8 @@ def do_onestep(Tree:'TreeBase', iout:int, reftot:float=time.time()):
         print(traceback.format_exc()); Tree.logger.error(traceback.format_exc())
         print(e); Tree.logger.error(e)
         Tree.logger.error(Tree.summary())
-        print("\nIteration is terminated\n"); Tree.logger.error("\nIteration is terminated\n")
-        os._exit(1)
+        print("\nIteration is terminated (`do_onestep`)\n"); Tree.logger.error("\nIteration is terminated (`do_onestep`)\n")
+        sys.exit(1)
         
 
 
@@ -286,9 +289,9 @@ def connect(p:DotDict, logger:logging.Logger):
                         if(dhalo['fat']>0):
                             pass
                         elif(dhalo['fat']==0):
+                            pscore = dhalo['prog_score'][np.where(dhalo['prog']==iid)[0][0]]
                             logger.debug(f"\tAlso, {idesc} changes father {dhalo['fat']}({dhalo['fat_score']:.2f}) -> {iid}({pscore:.2f})")
                             dhalo['fat'] = iid
-                            pscore = dhalo['prog_score'][np.where(dhalo['prog']==iid)[0][0]]
                             dhalo['fat_score'] = pscore
                         else:
                             pscore = dhalo['prog_score'][np.where(dhalo['prog']==iid)[0][0]]
@@ -320,9 +323,9 @@ def connect(p:DotDict, logger:logging.Logger):
                         if(phalo['son']>0):
                             pass
                         elif(phalo['son']==0):
+                            dscore = phalo['desc_score'][np.where(phalo['desc']==iid)[0][0]]
                             logger.debug(f"\tAlso, {iprog} changes son {phalo['son']}({phalo['son_score']:.2f}) -> {iid}({dscore:.2f})")
                             phalo['son'] = iid
-                            dscore = phalo['desc_score'][np.where(phalo['desc']==iid)[0][0]]
                             phalo['son_score'] = dscore
                         else:
                             dscore = phalo['desc_score'][np.where(phalo['desc']==iid)[0][0]]

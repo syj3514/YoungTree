@@ -6,7 +6,7 @@ import yroot
 import time
 from numba import set_num_threads
 import gc
-import argparse
+import argparse, subprocess
 
 # Read command
 print("$ python3 YoungTree.py params.py [-ncpu 32] [-mode y07206]")
@@ -46,11 +46,20 @@ if __name__=='__main__':
                         reftime = time.time()
 
                         for iout in params.nout:
-                            os.system(f"python3 ysub.py {iout} {reftime} {params.resultdir} {params.logprefix}")
+                            if os.path.exists(f"{params.resultdir}/by-product/{params.logprefix}{iout:05d}.pickle"):
+                                continue
+                            subprocess.run(["python3", "ysub.py", str(iout), str(reftime), params.resultdir, params.logprefix, mainlog.name], check=True)
+                            # os.system(f"python3 ysub.py {iout} {reftime} {params.resultdir} {params.logprefix} {mainlog.name}")
                             if(os.path.isfile(f"{params.resultdir}/{params.logprefix}success.tmp")):
                                 os.remove(f"{params.resultdir}/{params.logprefix}success.tmp")
                             else:
-                                raise RuntimeError("No success.tmp")
+                                if(os.path.exists(f"{params.resultdir}/by-product/{params.logprefix}{iout:05d}.pickle")):
+                                    pass
+                                else:
+                                    if(os.path.exists(f"{params.resultdir}/by-product/{params.logprefix}{iout:05d}_temp.pickle")):
+                                        pass
+                                    else:
+                                        raise RuntimeError("No success.tmp")
                             time.sleep(1)
                         # for iout in params.nout:
                         #     do_onestep(treebase, iout, reftot=reftime)
@@ -92,5 +101,5 @@ if __name__=='__main__':
         print(); mainlog.error("")
         print(traceback.format_exc()); mainlog.error(traceback.format_exc())
         print(e); mainlog.error(e)
-        print("\nIteration is terminated\n"); mainlog.error("\nIteration is terminated\n")
-        os._exit(1)
+        print("\nIteration is terminated (`__main__`)\n"); mainlog.error("\nIteration is terminated (`__main__`)\n")
+        sys.exit(1)

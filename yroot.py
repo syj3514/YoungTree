@@ -190,7 +190,7 @@ class TreeBase:
             def _load_leaf(self, iout:int, galid:int, backup:dict=None, backups=None, prefix="", level='debug', verbose=verbose+1):
                 if os.path.isfile(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout}_leaf_{galid}.pkl"):
                     backup = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout}_leaf_{galid}.pkl")
-                    leaf = Leaf(self, None, None, backup=backup)
+                    leaf = Leaf(self, None, None, None, backup=backup)
                     if not leaf.contam:
                         leaf.base = self
                         leaf.logger = self.logger
