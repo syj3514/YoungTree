@@ -121,7 +121,8 @@ def do_onestep(Tree:'TreeBase', iout:int, reftot:float=time.time()):
                             pass
                         else:
                             Tree.finalize(out, level='info')
-                        Tree.flush(out, leafclear=True, level='info')        
+                        Tree.flush(out, level='info')        
+                        Tree.logger.info(f"\n{Tree.summary()}\n")
             
             # Backup files
             Tree.leaf_write(level='info')

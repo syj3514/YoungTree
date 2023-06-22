@@ -104,9 +104,9 @@ class TreeBase:
                 snap = uri.RamsesSnapshot(self.p.repo, iout, mode=self.p.rurmode, path_in_repo=path_in_repo)
                 if(self.p.loadall)and(not iout in self.banned_list):
                     if(self.p.mode[0]=='y')or(self.p.mode=='nh'):
-                        snap.get_part(pname=self.partstr, python=(not self.p.usefortran), nthread=self.p.ncpu, target_fields=["x","y","z","vx","vy","vz","m","epoch","id","cpu"])
+                        snap.get_part(pname=self.partstr, python=(not self.p.usefortran), nthread=self.p.ncpu, target_fields=["x","y","z","vx","vy","vz","m","id","cpu"])
                     else:
-                        snap.get_part(pname=self.partstr, python=(not self.p.usefortran), nthread=self.p.ncpu, target_fields=["x","y","z","vx","vy","vz","m","epoch","id","cpu","family"])
+                        snap.get_part(pname=self.partstr, python=(not self.p.usefortran), nthread=self.p.ncpu, target_fields=["x","y","z","vx","vy","vz","m","id","cpu","family"])
                     snap.part.table = snap.part.table[np.argsort(np.abs(snap.part.table['id']))] # <- __copy__
                     snap.part.extra_fields = None
                     del snap.part.extra_fields
@@ -238,7 +238,7 @@ class TreeBase:
             return self.dict_leaves[iout][galid]
     
     @_debug
-    def flush(self, iout:int, prefix="", leafclear=False, logger=None, level='info', verbose=0):
+    def flush(self, iout:int, prefix="", logger=None, level='info', verbose=0):
         if logger is None:
             logger = self.logger
         
@@ -317,6 +317,7 @@ class TreeBase:
                         self.print(f"[flush #2] Leaf{key} at {iout} is dumped", level='info')
                     self.dict_leaves[iout][key] = None
                 leaf = None                
+            
         gc.collect()
         self.memory = GB()
 
@@ -548,6 +549,7 @@ class TreeBase:
             if(self.p.loadall):
                 break
         self.flush(iout, prefix=prefix)
+        self.print(f"\n{self.summary()}\n")
         leaves = None; del leaves
         backup = None; del backup
 
