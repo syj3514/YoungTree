@@ -36,11 +36,13 @@ try:
 
 
     if treebase.memory > treebase.p.flushGB:
-        treebase.print(f"\nMemory exceed\n")
+        treebase.print(f"\nMemory exceed\n", level='info')
         treebase.flush(iout)
     pklsave(treebase, f"{resultdir}/{logprefix}treebase.temp.pickle", overwrite=True)
-    treebase.print(f"\niout={iout} done\n")
+    treebase.print(f"\niout={iout} done\n", level='info')
+    del treebase
 except Exception as e:
+    print("[Error in `ysub.py`]")
     print()
     print(e)
     print(traceback.format_exc())

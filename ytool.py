@@ -1,5 +1,5 @@
 import numpy as np
-import os
+import os, shutil
 from collections.abc import Iterable
 import numba as nb
 import importlib
@@ -110,7 +110,7 @@ def pklsave(data,fname, overwrite=False):
     '''
     pklsave(array, 'repo/fname.pickle', overwrite=False)
     '''
-    if os.path.isfile(fname):
+    if os.path.exists(fname):
         if overwrite == False:
             raise FileExistsError(f"{fname} already exist!!")
         else:

@@ -50,27 +50,27 @@ def do_onestep(Tree:'TreeBase', iout:int, reftot:float=time.time()):
         logname = Tree.mainlog.name
         Tree.mainlog = follow_log(logname, detail=Tree.p.detail)
         # Fully saved
-        if os.path.isfile(f"{resultdir}/by-product/{Tree.p.logprefix}{iout:05d}.pickle"):
+        if os.path.exists(f"{resultdir}/by-product/{Tree.p.logprefix}{iout:05d}.pickle"):
             Tree.mainlog.info(f"[Queue] {iout} is done --> Skip\n")
             skip=True
         
         
         # Temp exists
-        if os.path.isfile(f"{resultdir}/by-product/{Tree.p.logprefix}{iout:05d}_temp.pickle"):
-            Tree.mainlog.info(f"[Queue] `{resultdir}/by-product/{Tree.p.logprefix}{iout:05d}_temp.pickle` is found")
+        if os.path.exists(f"{resultdir}/by-product/{Tree.p.logprefix}{iout:05d}_temp"):
+            Tree.mainlog.info(f"[Queue] `{resultdir}/by-product/{Tree.p.logprefix}{iout:05d}_temp` is found")
             cutstep = istep+Tree.p.nsnap
             if cutstep <= np.max(nstep):
                 cutout = Tree.step2out(cutstep)
-                if os.path.isfile(f"{resultdir}/by-product/{Tree.p.logprefix}{cutout:05d}_temp.pickle"):
+                if os.path.exists(f"{resultdir}/by-product/{Tree.p.logprefix}{cutout:05d}_temp"):
                     # For example,
-                    # there is a file `ytree_00100_temp.pickle` and not `ytree_00105_temp.pickle`
+                    # there is a directory `ytree_00100_temp` and not `ytree_00105_temp`
                     # It means the all calculation in 100th snap are finished
                     # However, the temp is still needed for the next 5 snaps
                     # In this case, we don't have to calculate 100th snap again
-                    Tree.mainlog.info(f"[Queue] `{resultdir}/by-product/{Tree.p.logprefix}{cutout:05d}_temp.pickle` is found --> Do\n")
+                    Tree.mainlog.info(f"[Queue] `{resultdir}/by-product/{Tree.p.logprefix}{cutout:05d}_temp` is found --> Do\n")
                     skip=False
                 else:
-                    Tree.mainlog.info(f"[Queue] `{resultdir}/by-product/{Tree.p.logprefix}{cutout:05d}_temp.pickle` is not found --> Skip\n")
+                    Tree.mainlog.info(f"[Queue] `{resultdir}/by-product/{Tree.p.logprefix}{cutout:05d}_temp` is not found --> Skip\n")
                     skip=True
             else:
                 skip=False
@@ -81,13 +81,13 @@ def do_onestep(Tree:'TreeBase', iout:int, reftot:float=time.time()):
             Tree.mainlog.info(f"[Queue] {iout} start")
             Tree.logger, _, newlog = make_log(Tree.p.repo, f"{iout:05d}", detail=Tree.p.detail, prefix=Tree.p.logprefix, path_in_repo="YoungTree/log")
             Tree.mainlog.info(f"See `{newlog}`\n")
-            Tree.update_debugger()
-            Tree.logger.info(f"\n{Tree.summary()}\n")
             
             # Load snap gal part
             Tree.logger.info(f"\n\nStart at iout={iout}\n")
             Tree.leaf_read(iout, level='info', verbose=0)
-            Tree.logger.info("\n")
+            Tree.update_debugger(iout=iout)
+            Tree.logger.info(f"\n{Tree.summary()}\n")
+            Tree.logger.info("\n----------------\nFind progenitors\n----------------\n")
             
             # Find progenitors
             for j in range(Tree.p.nsnap):
@@ -96,9 +96,13 @@ def do_onestep(Tree:'TreeBase', iout:int, reftot:float=time.time()):
                     jout = Tree.step2out(jstep)
                     Tree.logger.info(f"\n\nProgenitor at jout={jout}\n")
                     Tree.leaf_read(jout, level='info', verbose=0)
+                    Tree.update_debugger(iout=jout)
+                    Tree.logger.info(f"\n{Tree.summary()}\n")
                     Tree.logger.info("\n")
                     Tree.find_cands(iout, jout, level='info')
+                    Tree.flush(jout, level='info')
             
+            Tree.logger.info("\n----------------\nFind descendants\n----------------\n")
             # Find descendants
             for j in range(Tree.p.nsnap):
                 jstep = istep+j+1
@@ -106,9 +110,12 @@ def do_onestep(Tree:'TreeBase', iout:int, reftot:float=time.time()):
                     jout = Tree.step2out(jstep)
                     Tree.logger.info(f"\n\nDescendant at jout={jout}\n")
                     Tree.leaf_read(jout, level='info', verbose=0)
+                    Tree.update_debugger(iout=jout)
+                    Tree.logger.info(f"\n{Tree.summary()}\n")
                     Tree.logger.info("\n")
                     Tree.find_cands(iout, jout, level='info')
-            Tree.logger.info(f"\n\n")
+                    Tree.flush(jout, level='info')
+            Tree.logger.info("\n----------------\nFlush Redundants\n----------------\n")
             
             # Flush redundant snapshots
             cutstep = istep+Tree.p.nsnap
@@ -123,7 +130,7 @@ def do_onestep(Tree:'TreeBase', iout:int, reftot:float=time.time()):
                             Tree.finalize(out, level='info')
                         Tree.flush(out, level='info')        
                         Tree.logger.info(f"\n{Tree.summary()}\n")
-            
+            Tree.logger.info("\n----------------\nBackup leaf files\n----------------\n")
             # Backup files
             Tree.leaf_write(level='info')
             Tree.logger.info(f"\n{Tree.summary()}\n")
@@ -147,7 +154,7 @@ def do_onestep(Tree:'TreeBase', iout:int, reftot:float=time.time()):
 # @debugf(ontime=True, onmem=True, oncpu=True)
 def gather(p:DotDict, logger:logging.Logger):
     go=True
-    if os.path.isfile(f"{p.resultdir}/{p.logprefix}all.pickle"):
+    if os.path.exists(f"{p.resultdir}/{p.logprefix}all.pickle"):
         ans=input(f"You already have `{p.resultdir}/{p.logprefix}all.pickle`. Ovewrite? [Y/N]")
         go = ans in yess
     if go:
@@ -208,7 +215,7 @@ def connect(p:DotDict, logger:logging.Logger):
         if(len(temp)!=np.max(temp['id'])):
             complete = False
     go=True
-    if os.path.isfile(f"{p.resultdir}/{p.logprefix}stable.pickle"):
+    if os.path.exists(f"{p.resultdir}/{p.logprefix}stable.pickle"):
         ans=input(f"You already have `{p.resultdir}/{p.logprefix}stable.pickle`. Ovewrite? [Y/N]")
         go = ans in yess
     if go:
@@ -368,7 +375,7 @@ def build_branch(p:DotDict, logger:logging.Logger):
         if(len(temp)!=np.max(temp['id'])):
             complete = False
     go=True
-    if os.path.isfile(f"{p.resultdir}/{p.logprefix}stable.pickle"):
+    if os.path.exists(f"{p.resultdir}/{p.logprefix}stable.pickle"):
         ans=input(f"You already have `{p.resultdir}/{p.logprefix}stable.pickle`. Ovewrite? [Y/N]")
         go = ans in yess
     if go:
@@ -432,7 +439,7 @@ def connect_legacy(p:DotDict, logger:logging.Logger):
         if(len(temp)!=np.max(temp['id'])):
             complete = False
     go=True
-    if os.path.isfile(f"{p.resultdir}/{p.logprefix}stable.pickle"):
+    if os.path.exists(f"{p.resultdir}/{p.logprefix}stable.pickle"):
         ans=input(f"You already have `{p.resultdir}/{p.logprefix}stable.pickle`. Ovewrite? [Y/N]")
         go = ans in yess
     if go:
@@ -694,7 +701,7 @@ def name_log(repo, name, prefix=None):
     if prefix is None: prefix='ytree_'
     count = 0
     fname = f"{repo}/{prefix}{name}_{count}.log"
-    while os.path.isfile(fname):
+    while os.path.exists(fname):
         count+=1
         fname = f"{repo}/{prefix}{name}_{count}.log"
     return fname

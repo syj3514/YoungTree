@@ -35,10 +35,10 @@ if __name__=='__main__':
     if not os.path.exists(f"{params.resultdir}/log"):
         os.mkdir(f"{params.resultdir}/log")
     try:
-        if not os.path.isfile(f"{params.resultdir}/{params.logprefix}stable.pickle"):
-            if not os.path.isfile(f"{params.resultdir}/{params.logprefix}fatson.pickle"):
-                if not os.path.isfile(f"{params.resultdir}/{params.logprefix}all.pickle"):
-                    if not os.path.isfile(f"{params.resultdir}/by-product/{params.logprefix}checkpoint.pickle"):
+        if not os.path.exists(f"{params.resultdir}/{params.logprefix}stable.pickle"):
+            if not os.path.exists(f"{params.resultdir}/{params.logprefix}fatson.pickle"):
+                if not os.path.exists(f"{params.resultdir}/{params.logprefix}all.pickle"):
+                    if not os.path.exists(f"{params.resultdir}/by-product/{params.logprefix}checkpoint.pickle"):
                         if(not os.path.exists(f"{params.resultdir}/{params.logprefix}treebase.temp.pickle")):
                             treebase = yroot.TreeBase(params, logger=mainlog)
                             pklsave(treebase, f"{params.resultdir}/{params.logprefix}treebase.temp.pickle", overwrite=True)
@@ -50,13 +50,13 @@ if __name__=='__main__':
                                 continue
                             subprocess.run(["python3", "ysub.py", str(iout), str(reftime), params.resultdir, params.logprefix, mainlog.name], check=True)
                             # os.system(f"python3 ysub.py {iout} {reftime} {params.resultdir} {params.logprefix} {mainlog.name}")
-                            if(os.path.isfile(f"{params.resultdir}/{params.logprefix}success.tmp")):
+                            if(os.path.exists(f"{params.resultdir}/{params.logprefix}success.tmp")):
                                 os.remove(f"{params.resultdir}/{params.logprefix}success.tmp")
                             else:
                                 if(os.path.exists(f"{params.resultdir}/by-product/{params.logprefix}{iout:05d}.pickle")):
                                     pass
                                 else:
-                                    if(os.path.exists(f"{params.resultdir}/by-product/{params.logprefix}{iout:05d}_temp.pickle")):
+                                    if(os.path.exists(f"{params.resultdir}/by-product/{params.logprefix}{iout:05d}_temp")):
                                         pass
                                     else:
                                         raise RuntimeError("No success.tmp")
@@ -69,7 +69,7 @@ if __name__=='__main__':
                         # treebase.p = DotDict(treebase.p)
                         outs = list(treebase.dict_leaves.keys())
                         for iout in outs:
-                            treebase.flush(iout, leafclear="True")
+                            treebase.flush(iout)
                             treebase.finalize(iout)
                         treebase.mainlog.info(f"\n{treebase.summary()}\n")
                         
