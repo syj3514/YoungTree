@@ -1,7 +1,7 @@
 import sys
 import importlib
 from ytool import *
-from yrun import make_log, do_onestep, connect, gather, DebugDecorator, build_branch
+from yrun import make_log, do_onestep, connect, gather, DebugDecorator, build_branch, follow_log
 import yroot
 import time
 from numba import set_num_threads
@@ -66,11 +66,14 @@ if __name__=='__main__':
                         #     if treebase.memory > treebase.p.flushGB:
                         #         treebase.flush(iout)
                         treebase = pklload(f"{params.resultdir}/{params.logprefix}treebase.temp.pickle")
+                        if(treebase.mainlog.name != mainlog.name):
+                            treebase.mainlog = follow_log(mainlog.name, detail=treebase.p.detail)
+                        treebase.logger = mainlog
                         # treebase.p = DotDict(treebase.p)
                         outs = list(treebase.dict_leaves.keys())
                         for iout in outs:
+                            treebase.finalize(iout, level='info')
                             treebase.flush(iout)
-                            treebase.finalize(iout)
                         treebase.mainlog.info(f"\n{treebase.summary()}\n")
                         
                         pklsave(np.array([]), f"{params.resultdir}/by-product/{params.logprefix}checkpoint.pickle")

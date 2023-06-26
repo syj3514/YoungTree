@@ -560,6 +560,9 @@ class TreeBase:
         if os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/keys.pickle"):
             keys = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/keys.pickle")
             # leaves = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp.pickle")
+        if(keys is None):
+            if(iout in self.banned_list): self.banned_list.remove(iout)
+            if(iout in self.out_of_use): self.out_of_use.remove(iout)
         self.load_snap(iout, prefix=prefix, verbose=verbose+1, level=level) # INEFFICIENT
         gals = self.load_gals(iout, galid='all', prefix=prefix, verbose=verbose+1, level=level)
         

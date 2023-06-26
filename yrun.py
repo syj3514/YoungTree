@@ -56,24 +56,24 @@ def do_onestep(Tree:'TreeBase', iout:int, reftot:float=time.time()):
         
         
         # Temp exists
-        if os.path.exists(f"{resultdir}/by-product/{Tree.p.logprefix}{iout:05d}_temp"):
-            Tree.mainlog.info(f"[Queue] `{resultdir}/by-product/{Tree.p.logprefix}{iout:05d}_temp` is found")
-            cutstep = istep+Tree.p.nsnap
-            if cutstep <= np.max(nstep):
-                cutout = Tree.step2out(cutstep)
-                if os.path.exists(f"{resultdir}/by-product/{Tree.p.logprefix}{cutout:05d}_temp"):
-                    # For example,
-                    # there is a directory `ytree_00100_temp` and not `ytree_00105_temp`
-                    # It means the all calculation in 100th snap are finished
-                    # However, the temp is still needed for the next 5 snaps
-                    # In this case, we don't have to calculate 100th snap again
-                    Tree.mainlog.info(f"[Queue] `{resultdir}/by-product/{Tree.p.logprefix}{cutout:05d}_temp` is found --> Do\n")
-                    skip=False
-                else:
-                    Tree.mainlog.info(f"[Queue] `{resultdir}/by-product/{Tree.p.logprefix}{cutout:05d}_temp` is not found --> Skip\n")
-                    skip=True
-            else:
-                skip=False
+        # if os.path.exists(f"{resultdir}/by-product/{Tree.p.logprefix}{iout:05d}_temp"):
+        #     Tree.mainlog.info(f"[Queue] `{resultdir}/by-product/{Tree.p.logprefix}{iout:05d}_temp` is found")
+        #     cutstep = istep+Tree.p.nsnap
+        #     if cutstep <= np.max(nstep):
+        #         cutout = Tree.step2out(cutstep)
+        #         if os.path.exists(f"{resultdir}/by-product/{Tree.p.logprefix}{cutout:05d}_temp"):
+        #             # For example,
+        #             # there is a directory `ytree_00100_temp` and not `ytree_00105_temp`
+        #             # It means the all calculation in 100th snap are finished
+        #             # However, the temp is still needed for the next 5 snaps
+        #             # In this case, we don't have to calculate 100th snap again
+        #             Tree.mainlog.info(f"[Queue] `{resultdir}/by-product/{Tree.p.logprefix}{cutout:05d}_temp` is found --> Do\n")
+        #             skip=False
+        #         else:
+        #             Tree.mainlog.info(f"[Queue] `{resultdir}/by-product/{Tree.p.logprefix}{cutout:05d}_temp` is not found --> Skip\n")
+        #             skip=True
+        #     else:
+        #         skip=False
     
         # Main process
         if not skip:
@@ -125,7 +125,7 @@ def do_onestep(Tree:'TreeBase', iout:int, reftot:float=time.time()):
                 for out in outs:
                     if out > cutout:
                         if(os.path.exists(f"{resultdir}/by-product/{Tree.p.logprefix}{out:05d}.pickle")):
-                            pass
+                            Tree.out_of_use.append(out)
                         else:
                             Tree.finalize(out, level='info')
                         Tree.flush(out, level='info')        
