@@ -133,10 +133,14 @@ class TreeBase:
                     @_debug
                     def __load_gals(self, snap:uri.RamsesSnapshot, galid=None, prefix="", level='debug', verbose=1):
                         gm, gpids = uhmi.HaloMaker.load(snap, galaxy=self.p.galaxy, double_precision=self.p.dp, load_parts=True, full_path=self.p.fullpath)
-                        tmp = np.repeat(gm['id'], gm['nparts'])
-                        self.part_halo_match[snap.iout] = np.zeros(np.max(gpids), dtype=np.int32)
-                        self.part_halo_match[snap.iout][gpids-1] = tmp
-                        del gpids, tmp
+                        if(os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout}_partmatch.pkl")):
+                            self.part_halo_match[snap.iout] = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout}_partmatch.pkl")
+                        else:
+                            tmp = np.repeat(gm['id'], gm['nparts'])
+                            self.part_halo_match[snap.iout] = np.zeros(np.max(gpids), dtype=np.int32)
+                            self.part_halo_match[snap.iout][gpids-1] = tmp
+                            del tmp
+                        del gpids
                         return gm
                     gm = __load_gals(self, snap, galid=galid, prefix=prefix, level='debug', verbose=verbose+1)
                 else:
@@ -317,6 +321,8 @@ class TreeBase:
                 keys = list(self.dict_leaves[iout].keys())
                 for key in keys:
                     leaf:Leaf = self.dict_leaves[iout][key]
+                    if(not os.path.isdir(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp")):
+                        os.mkdir(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp")
                     if(leaf is None):
                         assert os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle")
                         self.print(f"[flush #2] Leaf{key} at {iout} is released", level='info')

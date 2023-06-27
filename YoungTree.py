@@ -48,7 +48,9 @@ if __name__=='__main__':
                         for iout in params.nout:
                             if os.path.exists(f"{params.resultdir}/by-product/{params.logprefix}{iout:05d}.pickle"):
                                 continue
-                            subprocess.run(["python3", "ysub.py", str(iout), str(reftime), params.resultdir, params.logprefix, mainlog.name], check=True)
+                            subdir = os.getcwd()
+                            if(not 'YoungTree' in subdir): subdir = f"{subdir}/YoungTree"
+                            subprocess.run(["python3", f"{subdir}/ysub.py", str(iout), str(reftime), params.resultdir, params.logprefix, mainlog.name], check=True)
                             # os.system(f"python3 ysub.py {iout} {reftime} {params.resultdir} {params.logprefix} {mainlog.name}")
                             if(os.path.exists(f"{params.resultdir}/{params.logprefix}success.tmp")):
                                 os.remove(f"{params.resultdir}/{params.logprefix}success.tmp")
