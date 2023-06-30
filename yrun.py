@@ -54,26 +54,6 @@ def do_onestep(Tree:'TreeBase', iout:int, reftot:float=time.time()):
             Tree.mainlog.info(f"[Queue] {iout} is done --> Skip\n")
             skip=True
         
-        
-        # Temp exists
-        # if os.path.exists(f"{resultdir}/by-product/{Tree.p.logprefix}{iout:05d}_temp"):
-        #     Tree.mainlog.info(f"[Queue] `{resultdir}/by-product/{Tree.p.logprefix}{iout:05d}_temp` is found")
-        #     cutstep = istep+Tree.p.nsnap
-        #     if cutstep <= np.max(nstep):
-        #         cutout = Tree.step2out(cutstep)
-        #         if os.path.exists(f"{resultdir}/by-product/{Tree.p.logprefix}{cutout:05d}_temp"):
-        #             # For example,
-        #             # there is a directory `ytree_00100_temp` and not `ytree_00105_temp`
-        #             # It means the all calculation in 100th snap are finished
-        #             # However, the temp is still needed for the next 5 snaps
-        #             # In this case, we don't have to calculate 100th snap again
-        #             Tree.mainlog.info(f"[Queue] `{resultdir}/by-product/{Tree.p.logprefix}{cutout:05d}_temp` is found --> Do\n")
-        #             skip=False
-        #         else:
-        #             Tree.mainlog.info(f"[Queue] `{resultdir}/by-product/{Tree.p.logprefix}{cutout:05d}_temp` is not found --> Skip\n")
-        #             skip=True
-        #     else:
-        #         skip=False
     
         # Main process
         if not skip:
@@ -84,8 +64,12 @@ def do_onestep(Tree:'TreeBase', iout:int, reftot:float=time.time()):
             
             # Load snap gal part
             Tree.logger.info(f"\n\nStart at iout={iout}\n")
-            Tree.leaf_read(iout, level='info', verbose=0)
-            Tree.update_debugger(iout=iout)
+            if(Tree.leaves['i']!={}):
+                Tree.write_leaves('i', level='info')
+                Tree.leaves['i']={}
+            Tree.outs['i'] = iout
+            Tree.read_leaves('i', level='info')
+            Tree.update_debugger('i')
             Tree.logger.info(f"\n{Tree.summary()}\n")
             Tree.logger.info("\n----------------\nFind progenitors\n----------------\n")
             
@@ -95,12 +79,18 @@ def do_onestep(Tree:'TreeBase', iout:int, reftot:float=time.time()):
                 if jstep > 0:
                     jout = Tree.step2out(jstep)
                     Tree.logger.info(f"\n\nProgenitor at jout={jout}\n")
-                    Tree.leaf_read(jout, level='info', verbose=0)
-                    Tree.update_debugger(iout=jout)
+                    if(Tree.leaves['j']!={}):
+                        Tree.write_leaves('j', level='info')
+                        Tree.leaves['j']={}
+                    Tree.outs['j'] = jout
+                    Tree.read_leaves('j', level='info')
+                    Tree.update_debugger('j')
                     Tree.logger.info(f"\n{Tree.summary()}\n")
                     Tree.logger.info("\n")
-                    Tree.find_cands(iout, jout, level='info')
+                    Tree.find_cands(level='info')
                     Tree.flush(jout, level='info')
+            Tree.write_leaves('j', level='info')
+            Tree.leaves['j']={}
             
             Tree.logger.info("\n----------------\nFind descendants\n----------------\n")
             # Find descendants
@@ -109,30 +99,38 @@ def do_onestep(Tree:'TreeBase', iout:int, reftot:float=time.time()):
                 if jstep <= np.max(nstep):
                     jout = Tree.step2out(jstep)
                     Tree.logger.info(f"\n\nDescendant at jout={jout}\n")
-                    Tree.leaf_read(jout, level='info', verbose=0)
-                    Tree.update_debugger(iout=jout)
+                    if(Tree.leaves['j']!={}):
+                        Tree.write_leaves('j', level='info')
+                        Tree.leaves['j']={}
+                    Tree.outs['j'] = jout
+                    Tree.read_leaves('j', level='info')
+                    Tree.update_debugger('j')
                     Tree.logger.info(f"\n{Tree.summary()}\n")
                     Tree.logger.info("\n")
-                    Tree.find_cands(iout, jout, level='info')
+                    Tree.find_cands(level='info')
                     Tree.flush(jout, level='info')
             Tree.logger.info("\n----------------\nFlush Redundants\n----------------\n")
+            Tree.write_leaves('j', level='info')
+            Tree.leaves['j']={}
             
             # Flush redundant snapshots
             cutstep = istep+Tree.p.nsnap
             if cutstep<=np.max(nstep):
                 cutout = Tree.step2out(cutstep)
-                outs = list(Tree.dict_leaves.keys())
+                outs = Tree.out_on_table
                 for out in outs:
                     if out > cutout:
                         if(os.path.exists(f"{resultdir}/by-product/{Tree.p.logprefix}{out:05d}.pickle")):
                             Tree.out_of_use.append(out)
                         else:
                             Tree.finalize(out, level='info')
+                        Tree.out_on_table.remove(out)
                         Tree.flush(out, level='info')        
                         Tree.logger.info(f"\n{Tree.summary()}\n")
             Tree.logger.info("\n----------------\nBackup leaf files\n----------------\n")
             # Backup files
-            Tree.leaf_write(level='info')
+            Tree.write_leaves('i', level='info')
+            Tree.leaves['i']={}
             Tree.logger.info(f"\n{Tree.summary()}\n")
             treerecord(iout, nout, time.time()-ref, time.time()-reftot, Tree.mainlog)
     except Exception as e:

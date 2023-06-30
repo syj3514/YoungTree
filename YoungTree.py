@@ -72,10 +72,11 @@ if __name__=='__main__':
                             treebase.mainlog = follow_log(mainlog.name, detail=treebase.p.detail)
                         treebase.logger = mainlog
                         # treebase.p = DotDict(treebase.p)
-                        outs = list(treebase.dict_leaves.keys())
+                        outs = treebase.out_on_table
                         for iout in outs:
                             treebase.finalize(iout, level='info')
                             treebase.flush(iout)
+                        treebase.out_on_table=[]
                         treebase.mainlog.info(f"\n{treebase.summary()}\n")
                         
                         pklsave(np.array([]), f"{params.resultdir}/by-product/{params.logprefix}checkpoint.pickle")
