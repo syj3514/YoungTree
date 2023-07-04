@@ -50,6 +50,7 @@ if __name__=='__main__':
                                 continue
                             subdir = os.getcwd()
                             if(not 'YoungTree' in subdir): subdir = f"{subdir}/YoungTree"
+                            #For tardis07, /gem_home/jeon/.conda/envs/py310/bin/python3
                             subprocess.run(["python3", f"{subdir}/ysub.py", str(iout), str(reftime), params.resultdir, params.logprefix, mainlog.name], check=True)
                             # os.system(f"python3 ysub.py {iout} {reftime} {params.resultdir} {params.logprefix} {mainlog.name}")
                             if(os.path.exists(f"{params.resultdir}/{params.logprefix}success.tmp")):

@@ -24,7 +24,7 @@ nice = 1
 #       False:    Use halo and DM
 galaxy = True
 fullpath=None
-loadall = True
+loadall = False
 usefortran = False
 
 #   [nsnap]

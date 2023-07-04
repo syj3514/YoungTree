@@ -760,19 +760,18 @@ class Leaf:
             self.saved_matchrate[jout] = {}
             self.changed = True
         if not otherleaf.id in self.saved_matchrate[jout].keys():
-            self.saved_matchrate[jout][otherleaf.id] = (val, ind)
+            # self.saved_matchrate[jout][otherleaf.id] = (val, ind)
+            self.saved_matchrate[jout][otherleaf.id] = val
             self.changed = True
         return val, ind
     
     def calc_matchrate(self, otherleaf:'Leaf', prefix="", level='debug', verbose=0) -> float:
-        calc = True
-        jout = otherleaf.iout
-        if jout in self.saved_matchrate.keys():
-            if otherleaf.id in self.saved_matchrate[jout].keys():
-                val, ind = self.saved_matchrate[jout][otherleaf.id]
-                calc = False
-        if calc:
-            val, ind = self._calc_matchrate(otherleaf, prefix=prefix, level=level, verbose=verbose)
+        # jout = otherleaf.iout
+        # if jout in self.saved_matchrate.keys():
+        #     if otherleaf.id in self.saved_matchrate[jout].keys():
+        #         val, ind = self.saved_matchrate[jout][otherleaf.id]
+        #         return val, ind
+        val, ind = self._calc_matchrate(otherleaf, prefix=prefix, level=level, verbose=verbose)
         return val, ind
 
     @_debug_leaf
