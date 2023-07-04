@@ -424,6 +424,24 @@ class TreeBase:
 
     @_debug
     def find_cands(self, mcut=0.01, prefix="", level='debug', verbose=0):
+        """
+        Finds candidates based on certain conditions and performs calculations.
+        1) It starts by retrieving the keys from the 'i' and 'j' dictionaries stored in the leaves attribute.
+        2) For each key in ikeys, it loads the corresponding leaf object (ileaf).
+        3) It determines whether a calculation is required based on the relationship between the 'j' and 'i' values.
+        4) If a calculation is needed, it performs the main calculation, which involves filtering and manipulating data using numpy functions.
+        5) If no calculation is required, it retrieves pre-calculated values from the leaf object.
+        6) It generates a debugging message based on the number of candidates and prints it if the verbosity level allows.
+
+        Parameters:
+            `mcut` (float): Threshold value for candidate selection (default=0.01).
+            `prefix` (str): Prefix for debugging message (default="").
+            `level` (str): Debug level (default='debug').
+            `verbose` (int): Verbosity level (default=0).
+
+        Returns:
+            None
+        """
         ikeys = list(self.leaves['i'].keys())
         jkeys = list(self.leaves['j'].keys())
         jhalos_mem = None
@@ -660,9 +678,9 @@ class Leaf:
             arr = getattr(self, iattr)
             val += 0 if(arr is None) else arr.nbytes
         # Add dictionary
-        for key_iout in self.saved_matchrate.keys():
-            for key_id in self.saved_matchrate[key_iout].keys():
-                val += 0 if(self.saved_matchrate[key_iout][key_id] is None) else self.saved_matchrate[key_iout][key_id][1].nbytes
+        # for key_iout in self.saved_matchrate.keys():
+        #     for key_id in self.saved_matchrate[key_iout].keys():
+        #         val += 0 if(self.saved_matchrate[key_iout][key_id] is None) else self.saved_matchrate[key_iout][key_id][1].nbytes
         return val
 
     def summary(self):
