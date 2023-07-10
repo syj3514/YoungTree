@@ -4,6 +4,8 @@ import numpy as np
 import functools
 from collections import defaultdict
 from collections.abc import Iterable
+from multiprocessing import Pool, cpu_count
+import multiprocessing as mp
 import copy
 import logging
 import traceback
@@ -421,6 +423,102 @@ class TreeBase:
             ileaf = self.load_leaf(iorj, ikey)
             ileaf.logger = self.logger
 
+    # def _find_cands_mp(self, arg):
+    #     ikey, jkeys, jhalos_mem, mcut, prefix = arg
+    def _find_cands_mp(self, ikey, jkeys, jhalos_mem, mcut, prefix):
+        c_proc = mp.current_process()
+        print(f"{ikey} Running on Process",c_proc.name,"PID",c_proc.pid)
+        # print(f"ikey: {ikey} Start!! [{os.getpid()}]")
+        ileaf:Leaf = self.load_leaf('i', ikey, prefix=prefix, level='debug')
+        # Calc, or not?
+        calc = True
+        if(self.outs['j']>self.outs['i']):
+            if(ileaf.desc is not None):
+                if(self.outs['j'] in ileaf.desc[:,0]): calc=False
+        if(self.outs['j']<self.outs['i']):
+            if(ileaf.prog is not None):
+                if(self.outs['j'] in ileaf.prog[:,0]): calc=False
+        # Main calculation
+        if calc:
+            if jhalos_mem is None:
+                jhalos_mem = self.read_part_halo_match(self.outs['j'])
+            pid = ileaf.pid
+            pid = pid[pid <= len(jhalos_mem)]
+            hosts = jhalos_mem[pid-1]
+            hosts = hosts[hosts>0]
+            hosts, count = np.unique(hosts, return_counts=True) # CPU?
+            hosts = hosts[count/len(pid) > mcut]
+            hosts = hosts[ np.isin(hosts, jkeys, assume_unique=True) ]
+            # hosts = hosts[ large_isin(hosts, jkeys) ]
+            if len(hosts)>0:
+                otherleaves = [self.load_leaf('j', iid, prefix=prefix, level='debug') for iid in hosts]
+                ids, scores = ileaf.calc_score(self.outs['j'], otherleaves, prefix=f"<{ileaf._name}>",level='debug') # CPU?
+            else:
+                ids = np.array([[self.outs['j'], 0]])
+                scores = np.array([[-10, -10, -10, -10, -10]])
+        
+        # No need to calculation
+        else:
+            if self.outs['j']<self.outs['i']:
+                arg = ileaf.prog[:,0]==self.outs['j']
+                ids = ileaf.prog[arg]
+                scores = ileaf.prog_score[arg]
+            elif self.outs['j']>self.outs['i']:
+                arg = ileaf.desc[:,0]==self.outs['j']
+                ids = ileaf.desc[arg]
+                scores = ileaf.desc_score[arg]
+            else:
+                raise ValueError(f"Same output {self.outs['i']} and {self.outs['j']}!")        
+        # print(f"ikey: {ikey} Done [{os.getpid()}]")
+        print(f"{ikey} Ended  ","Process",c_proc.name)
+        return ikey, calc, ids, scores
+
+    @_debug
+    def find_cands_mp(self, mcut=0.01, prefix="", level='debug', verbose=0):
+        ikeys = list(self.leaves['i'].keys())
+        jkeys = np.array(list(self.leaves['j'].keys()))
+        jhalos_mem = self.read_part_halo_match(self.outs['j'])
+        if(self.outs['j'] in self.part_halo_match.keys()):
+            if len(self.part_halo_match[self.outs['j']])>0:
+                jhalos_mem = None
+
+        # Multiprocessing
+        with Pool(processes=self.p.ncpu) as pool:
+            print(f"{cpu_count()} CPUs are available!")
+            print("Pool start!")
+            results = pool.starmap_async(self._find_cands_mp, [(ikey, jkeys, jhalos_mem, mcut, prefix) for ikey in ikeys], chunksize=self.p.ncpu)
+            print("wait!")
+            results.wait()
+            print("get!")
+            results = results.get()
+            print("Pool Done!")
+
+        
+        for ikey, calc, ids, scores in results:
+            ileaf:Leaf = self.load_leaf('i', ikey, prefix=prefix, level=level, verbose=verbose+1)
+            if(calc):
+                if self.outs['j']<self.outs['i']:
+                    ileaf.prog = ids if ileaf.prog is None else np.vstack((ileaf.prog, ids))
+                    ileaf.prog_score = scores if ileaf.prog_score is None else np.vstack((ileaf.prog_score, scores))
+                    ileaf.changed = True
+                elif self.outs['j']>self.outs['i']:
+                    ileaf.desc = ids if ileaf.desc is None else np.vstack((ileaf.desc, ids))
+                    ileaf.desc_score = scores if ileaf.desc_score is None else np.vstack((ileaf.desc_score, scores))
+                    ileaf.changed = True
+                else:
+                    raise ValueError(f"Same output {self.outs['i']} and {self.outs['j']}!")
+            # Debugging message
+            msg = f"{prefix}<{ileaf.name()}> has {len(ids)} candidates"
+            if len(ids)>0:
+                if np.sum(scores[0])>0:
+                    if len(ids) < 6:
+                        msg = f"{msg} {[f'{ids[i][-1]}({scores[i][0]:.3f})' for i in range(len(ids))]}"
+                    else:
+                        msg = f"{msg} {[f'{ids[i][-1]}({scores[i][0]:.3f})' for i in range(5)]+['...']}"
+                else:
+                    msg = f"{prefix}<{ileaf.name()}> has {len(ids)-1} candidates"
+            if(verbose <= self.p.verbose):self.print(msg, level='debug')
+
 
     @_debug
     def find_cands(self, mcut=0.01, prefix="", level='debug', verbose=0):
@@ -768,7 +866,8 @@ class Leaf:
 
     @_debug_leaf
     def _calc_matchrate(self:'Leaf', otherleaf:'Leaf', prefix="", level='debug', verbose=0) -> float:
-        ind = large_isin(self.pid, otherleaf.pid)
+        # ind = large_isin(self.pid, otherleaf.pid)
+        ind = np.isin(self.pid, otherleaf.pid, assume_unique=True)
         if not True in ind:
             val = -1
         else:

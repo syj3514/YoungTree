@@ -66,7 +66,7 @@ def do_onestep(Tree:'TreeBase', iout:int, reftot:float=time.time()):
             Tree.logger.info(f"\n\nStart at iout={iout}\n")
             if(Tree.leaves['i']!={}):
                 Tree.write_leaves('i', level='info')
-                Tree.leaves['i']={}
+                Tree.leaves['i']={} # Is this best??? (Summary error)
             Tree.outs['i'] = iout
             Tree.read_leaves('i', level='info')
             Tree.update_debugger('i')
