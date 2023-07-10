@@ -560,7 +560,7 @@ class TreeBase:
                 hosts = hosts[hosts>0]
                 hosts, count = np.unique(hosts, return_counts=True) # CPU?
                 hosts = hosts[count/len(pid) > mcut]
-                hosts = hosts[ np.isin(hosts, jkeys, assume_unique=True) ]
+                hosts = hosts[ np.isin(hosts, jkeys, assume_unique=True) ] # Short, so no need to use large_isin
                 if len(hosts)>0:
                     otherleaves = [self.load_leaf('j', iid, prefix=prefix, level=level, verbose=verbose+1) for iid in hosts]
                     ids, scores = ileaf.calc_score(self.outs['j'], otherleaves, prefix=f"<{ileaf._name}>",level='debug', verbose=verbose+1) # CPU?
@@ -862,8 +862,18 @@ class Leaf:
 
     @_debug_leaf
     def _calc_matchrate(self:'Leaf', otherleaf:'Leaf', prefix="", level='debug', verbose=0) -> float:
+        large=False
+        ilen = len(self.pid); jlen = len(otherleaf.pid)
+        if(ilen >= 1e6)or(jlen >= 1e6):
+            large=True
+        elif(ilen*jlen >= 1e6):
+            if(min(ilen, jlen) >= 1e3):
+                large=True
+        
+        ind = large_isin(self.pid, otherleaf.pid) if(large) else np.isin(self.pid, otherleaf.pid, assume_unique=True)
+
         # ind = large_isin(self.pid, otherleaf.pid)
-        ind = np.isin(self.pid, otherleaf.pid, assume_unique=True)
+        # ind = np.isin(self.pid, otherleaf.pid, assume_unique=True)
         if not True in ind:
             val = -1
         else:
