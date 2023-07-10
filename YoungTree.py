@@ -44,16 +44,17 @@ if __name__=='__main__':
                             pklsave(treebase, f"{params.resultdir}/{params.logprefix}treebase.temp.pickle", overwrite=True)
                             del treebase
                         reftime = time.time()
-
+                        fout = np.max(params.nout)
                         for iout in params.nout:
                             if os.path.exists(f"{params.resultdir}/by-product/{params.logprefix}{iout:05d}.pickle"):
+                                fout = np.max(params.nout[params.nout<iout])
                                 continue
                             subdir = os.getcwd()
                             if(not 'YoungTree' in subdir): subdir = f"{subdir}/YoungTree"
 
                             
                             #For tardis07, /gem_home/jeon/.conda/envs/py310/bin/python3
-                            subprocess.run(["python3", f"{subdir}/ysub.py", str(iout), str(reftime), params.resultdir, params.logprefix, mainlog.name], check=True)
+                            subprocess.run(["python3", f"{subdir}/ysub.py", str(iout), str(fout), str(reftime), params.resultdir, params.logprefix, mainlog.name], check=True)
 
 
                             if(os.path.exists(f"{params.resultdir}/{params.logprefix}success.tmp")):

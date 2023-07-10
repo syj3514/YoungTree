@@ -427,8 +427,6 @@ class TreeBase:
     #     ikey, jkeys, jhalos_mem, mcut, prefix = arg
     def _find_cands_mp(self, ikey, jkeys, jhalos_mem, mcut, prefix):
         c_proc = mp.current_process()
-        print(f"{ikey} Running on Process",c_proc.name,"PID",c_proc.pid)
-        # print(f"ikey: {ikey} Start!! [{os.getpid()}]")
         ileaf:Leaf = self.load_leaf('i', ikey, prefix=prefix, level='debug')
         # Calc, or not?
         calc = True
@@ -469,8 +467,6 @@ class TreeBase:
                 scores = ileaf.desc_score[arg]
             else:
                 raise ValueError(f"Same output {self.outs['i']} and {self.outs['j']}!")        
-        # print(f"ikey: {ikey} Done [{os.getpid()}]")
-        print(f"{ikey} Ended  ","Process",c_proc.name)
         return ikey, calc, ids, scores
 
     @_debug
