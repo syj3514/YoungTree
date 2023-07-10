@@ -50,6 +50,7 @@ if __name__=='__main__':
                                 continue
                             subdir = os.getcwd()
                             if(not 'YoungTree' in subdir): subdir = f"{subdir}/YoungTree"
+                            #For tardis07, /gem_home/jeon/.conda/envs/py310/bin/python3
                             subprocess.run(["python3", f"{subdir}/ysub.py", str(iout), str(reftime), params.resultdir, params.logprefix, mainlog.name], check=True)
                             # os.system(f"python3 ysub.py {iout} {reftime} {params.resultdir} {params.logprefix} {mainlog.name}")
                             if(os.path.exists(f"{params.resultdir}/{params.logprefix}success.tmp")):
@@ -72,10 +73,11 @@ if __name__=='__main__':
                             treebase.mainlog = follow_log(mainlog.name, detail=treebase.p.detail)
                         treebase.logger = mainlog
                         # treebase.p = DotDict(treebase.p)
-                        outs = list(treebase.dict_leaves.keys())
+                        outs = treebase.out_on_table
                         for iout in outs:
                             treebase.finalize(iout, level='info')
                             treebase.flush(iout)
+                        treebase.out_on_table=[]
                         treebase.mainlog.info(f"\n{treebase.summary()}\n")
                         
                         pklsave(np.array([]), f"{params.resultdir}/by-product/{params.logprefix}checkpoint.pickle")

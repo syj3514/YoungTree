@@ -72,10 +72,15 @@ class TreeBase:
         
         self.mainlog:logging.Logger = logger
         self.logger:logging.Logger = self.mainlog
+
+
         self.dict_snap = {} # in {iout}, RamsesSnapshot object
         self.dict_gals = {} # in {iout}, galaxy array object
         self.dict_pure = {}
-        self.dict_leaves = defaultdict(dict) # in {iout}, in {galid}, Leaf object
+        self.outs = {'i':None, 'j':None}
+        self.leaves = {'i':{}, 'j':{}}
+        self.out_on_table = []
+
         self.part_halo_match = {} # in {iout}, list of int
         self.banned_list = []
         self.out_of_use = []
@@ -174,84 +179,78 @@ class TreeBase:
                 raise ValueError(f"Cannot find `part_halo_match` at {iout}!")
         else:
             raise ValueError(f"Cannot find a key `{iout}` in `part_halo_match`!")
-            
-    # def load_leaf(self, iout:int, galid:int, backup:dict=None, backups=None, prefix="", level='debug', verbose=0)->'Leaf':
-    def load_leaf(self, iout:int, galid:int, backup:dict=None, prefix="", level='info', verbose=0)->'Leaf':
-        calc = False
-        switch = False
-        if not galid in self.dict_leaves[iout].keys():
-            calc=True
+    
+    @_debug
+    def read_leaves(self, iorj:str, prefix="", level='info', verbose=0):
+        if(iorj!='i')and(iorj!='j'): raise ValueError(f"iorj must be 'i' or 'j'!")
+        
+        iout = self.outs[iorj]
+        assert self.leaves[iorj] == {}
+        snap = self.load_snap(iout, prefix=prefix)
+        gals = self.load_gals(iout, galid='all', prefix=prefix, verbose=verbose+1)
+        if(not self.p.galaxy): gals = gals[self.dict_pure[iout]]
+
+        if(os.path.isdir(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp")):
+            for igal in gals:
+                backup = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{igal['id']}.pickle")
+                self.leaves[iorj][igal['id']] = Leaf(self, igal, None, snap, backup=backup)
         else:
-            if self.dict_leaves[iout][galid] is None:
-                calc=True
+            if(self.p.loadall):
+                partmatch = self.read_part_halo_match(iout)
+                for igal in gals:
+                    self.leaves[iorj][igal['id']] = Leaf(self, igal, snap.part.table[np.where(partmatch == igal['id'])[0]], snap, backup=None)
+                snap.clear()
+                del partmatch, gals
+                self.banned_list.append(iout)
             else:
-                if(self.dict_leaves[iout][galid].cat is None):
-                    calc=True
-                    if(self.p.loadall):
-                        switch=True
-                        self.p.loadall = False
-        if(calc):
-            @_debug
-            # def _load_leaf(self, iout:int, galid:int, backup:dict=None, backups=None, prefix="", level='debug', verbose=verbose+1):
-            def _load_leaf(self, iout:int, galid:int, backup:dict=None, prefix="", level='debug', verbose=verbose+1):
-                # if os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout}_leaf_{galid}.pkl"):
-                #     backup = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout}_leaf_{galid}.pkl")
-                #     leaf = Leaf(self, None, None, None, backup=backup)
-                #     if not leaf.contam:
-                #         leaf.base = self
-                #         leaf.logger = self.logger
-                #         self.dict_leaves[iout][galid] = leaf
-                # else:
-                snap = self.load_snap(iout, prefix=prefix)
-                if(self.p.loadall)and(backup is None):
-                    gals = self.load_gals(iout, galid='all')
-                    if(not self.p.galaxy): gals = gals[ self.dict_pure[iout] ]
-                    # partmatch = self.read_part_halo_match(iout)
-                    partmatch = None
-                    for igal in gals:
-                        # if(backups is not None):
-                        #     ileaf = Leaf(self, igal, None,None, backup=backups[igal['id']])
-                        #     self.dict_leaves[iout][igal['id']] = ileaf
-                        # else:
-                        # if(backup is not None):
-                        #     ileaf = Leaf(self, igal, None, snap, backup=backup)
-                        # else:
-                        if(partmatch is None): partmatch = self.read_part_halo_match(iout)
-                        ileaf = Leaf(self, igal, snap.part.table[np.where(partmatch == igal['id'])[0]], snap, backup=backup) # <- __copy__
-                        if(not ileaf.contam):
-                            self.dict_leaves[iout][igal['id']] = ileaf
-                        del ileaf
-                    snap.clear()
-                    # self.dict_gals[iout] = np.array([])
-                    del partmatch, gals
-                    self.banned_list.append(iout)
-                else:
-                    gal = self.load_gals(iout, galid, prefix=prefix)
-                    go=True
-                    if(not self.p.galaxy):
-                        if(gal['mcontam']/gal['m'] > self.p.fcontam):
-                            go=False
-                    if(go):
-                        if(backup is not None):
-                            part = None
-                            ileaf = Leaf(self, gal, part, snap, backup=backup)
-                        else:
-                            part = uhmi.HaloMaker.read_member_part(snap, galid, galaxy=self.p.galaxy, full_path=self.p.fullpath, usefortran=self.p.usefortran)
-                            ileaf = Leaf(self, gal, part.table, snap, backup=backup)
-                        if not ileaf.contam:
-                            self.dict_leaves[iout][galid]=ileaf
-                        del ileaf, part
-                del snap
-            # _load_leaf(self, iout, galid, backup=backup, backups=backups, prefix=prefix, level=level, verbose=verbose+1)
-            _load_leaf(self, iout, galid, backup=backup, prefix=prefix, level='debug', verbose=verbose+1)
-            self.memory = GB()
-            if(switch): self.p.loadall = True
-        if galid in self.dict_leaves[iout].keys():
-            # [Debugging]
-            # if(iout==186)and(galid==1):
-            #     msg = self.dict_leaves[iout][galid].summary()
-            #     self.print(msg)
-            return self.dict_leaves[iout][galid]
+                for igal in gals:
+                    part = uhmi.HaloMaker.read_member_part(snap, igal['id'], galaxy=self.p.galaxy, full_path=self.p.fullpath, usefortran=self.p.usefortran)
+                    self.leaves[iorj][igal['id']] = Leaf(self, igal, part.table, snap, backup=None)
+                del part
+
+    def load_leaf(self, iorj:str, galid:int, backup:dict=None, prefix="", level='info', verbose=0)->'Leaf':
+        if(iorj!='i')and(iorj!='j'): raise ValueError(f"iorj must be 'i' or 'j'!")
+        iout = self.outs[iorj]
+        if(self.leaves[iorj] == {}):
+            self.read_leaves[iorj](prefix=prefix, level=level, verbose=verbose+1)
+        if(self.leaves[iorj][galid] is None):
+            backup = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{galid}.pickle")
+            self.leaves[iorj][galid] = Leaf(self, None, None, None, backup=backup)
+        return self.leaves[iorj][galid]
+
+    @_debug
+    def write_leaves(self, iorj:str, prefix="", level='info', verbose=0):
+        if(iorj!='i')and(iorj!='j'): raise ValueError(f"iorj must be 'i' or 'j'!")
+        iout = self.outs[iorj]
+        if(iout in self.out_of_use): return
+        if(not iout in self.out_on_table): self.out_on_table.append(iout)
+        if( not os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}.pickle") ):
+            prefix2 = f"[write_leaves]({iout})"
+
+            keys = list(self.leaves[iorj].keys())
+            if( not os.path.isdir(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp") ):
+                os.mkdir(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp")
+            if( not os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/keys.pickle") ):
+                pklsave(keys, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/keys.pickle", overwrite=True)
+            backup = {}
+            count = 0
+            for key in keys:
+                if( self.leaves[iorj][key] is None ): # Dumped
+                    continue
+                leaf = self.load_leaf(iorj, key, prefix=prefix, level=level, verbose=verbose+1)
+                if( leaf.changed ):
+                    backup = {}
+                    if( os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle") ):
+                        backup = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle")
+                    backup = leaf.selfsave(backup=backup)
+                    pklsave(backup, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle", overwrite=True)
+                    count += 1
+                self.leaves[iorj][key] = None
+            self.print(f"{prefix2} Write `{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp`", level=level)
+            self.print(f"{prefix2} {count}/{len(keys)} leaves", level=level)
+            del backup
+
+
     
     @_debug
     def flush(self, iout:int, prefix="", logger=None, level='info', verbose=0):
@@ -272,7 +271,6 @@ class TreeBase:
         keys = list(self.dict_gals.keys())
         for jout in keys:
             if(jout in self.out_of_use):
-                # self.dict_gals[jout] = {}
                 del self.dict_gals[jout]
                 self.print(f"[flush #1] gals at {jout} is released", level='info')
         keys = list(self.part_halo_match.keys())
@@ -286,21 +284,16 @@ class TreeBase:
         keys = list(self.dict_pure)
         for jout in keys:
             if(jout in self.out_of_use):
-                # self.dict_pure[jout] = []
                 del self.dict_pure[jout]
                 self.print(f"[flush #1] dict_pure at {jout} is released", level='info')
-        keys = list(self.dict_leaves.keys())
-        for jout in keys:
-            if(jout in self.out_of_use):
-                keys2 = list(self.dict_leaves[jout].keys())
-                for key in keys2:
-                    if(self.dict_leaves[jout][key] is not None):self.dict_leaves[jout][key].clear()
-                    del self.dict_leaves[jout][key]
-                    if os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle"):
-                        os.remove(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle")
-                        self.print(f"[flush #1] dumped leaf{key} at {jout} is removed", level='info')
-                del self.dict_leaves[jout]
-                self.print(f"[flush #1] leaves at {jout} are released", level='info')                
+        
+        for jout in self.out_of_use:
+            if(os.path.isdir(f"{self.p.resultdir}/by-product/{self.p.logprefix}{jout:05d}_temp")):
+                shutil.rmtree(f"{self.p.resultdir}/by-product/{self.p.logprefix}{jout:05d}_temp")
+                self.print(f"[flush #1] leaves at {jout} are removed", level='info')
+            if(self.outs['i']==jout): self.leaves['i'] = {}
+            if(self.outs['j']==jout): self.leaves['j'] = {}
+                    
         gc.collect()
         self.memory = GB()
             
@@ -317,24 +310,35 @@ class TreeBase:
                         self.print(f"[flush #2] partmatch at {iout} is released", level='info')
                     self.part_halo_match[iout] = np.array([], dtype=int)
                 partmatch = None
-            if(iout in self.dict_leaves.keys()):
-                keys = list(self.dict_leaves[iout].keys())
+            if(iout==self.outs['i']):
+                keys = list(self.leaves['i'].keys())
                 for key in keys:
-                    leaf:Leaf = self.dict_leaves[iout][key]
+                    leaf:Leaf = self.leaves['i'][key]
                     if(not os.path.isdir(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp")):
                         os.mkdir(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp")
-                    if(leaf is None):
-                        assert os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle")
-                        self.print(f"[flush #2] Leaf{key} at {iout} is released", level='info')
-                    else:
-                        temp={}
-                        if(os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle")):
-                            temp = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle")
-                        backup = leaf.selfsave(backup=temp)
-                        pklsave(backup, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle", overwrite=True)
-                        self.print(f"[flush #2] Leaf{key} at {iout} is dumped", level='info')
-                    self.dict_leaves[iout][key] = None
-                leaf = None                
+                    temp={}
+                    if(os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle")):
+                        temp = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle")
+                    backup = leaf.selfsave(backup=temp)
+                    pklsave(backup, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle", overwrite=True)
+                    self.print(f"[flush #2] iLeaf{key} at {iout} is dumped", level='info')
+                    self.leaves['i'][key] = None
+                del leaf, backup, temp
+            if(iout==self.outs['j']):
+                keys = list(self.leaves['j'].keys())
+                for key in keys:
+                    leaf:Leaf = self.leaves['j'][key]
+                    if(not os.path.isdir(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp")):
+                        os.mkdir(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp")
+                    temp={}
+                    if(os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle")):
+                        temp = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle")
+                    backup = leaf.selfsave(backup=temp)
+                    pklsave(backup, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle", overwrite=True)
+                    self.print(f"[flush #2] jLeaf{key} at {iout} is dumped", level='info')
+                    self.leaves['j'][key] = None
+                del leaf, backup, temp
+
             self.print(self.summary(), level='info')
             
         gc.collect()
@@ -354,26 +358,26 @@ class TreeBase:
 
         # For each iout, How many leaves
         temp = []
-        for key in self.dict_leaves.keys():
-            idkeys = list(self.dict_leaves[key].keys())
-            ndump = 0
-            val = sys.getsizeof(self.dict_leaves[key])
-            for idkey in idkeys:
-                ileaf = self.dict_leaves[key][idkey]
-                if(ileaf is not None):
-                    val += ileaf.size()
-                else:
-                    ndump += 1
-            temp.append(f"\t{key}: {len(idkeys)-ndump} leaves ({ndump} dumped) {val / 2**20:.2f} MB\n")
-            # if(self.dict_leaves[key][idkeys[0]] is None):
-            #     # Check dumped
-            #     ndump = 0
-            #     for idkey in idkeys:
-            #         if(os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{key}_leaf_{idkey}.pkl")):
-            #             ndump += 1
-            #     temp += f"\t{key}: {len(idkeys)-ndump} leaves ({ndump} leaves are dumped)\n"
-            # else:
-            #     temp += f"\t{key}: {len(idkeys)} leaves\n"
+        idkeys = list(self.leaves['i'].keys())
+        ndump = 0
+        val = sys.getsizeof(self.leaves['i'])
+        for idkey in idkeys:
+            ileaf = self.leaves['i'][idkey]
+            if(ileaf is not None):
+                val += ileaf.size()
+            else:
+                ndump += 1
+        temp.append(f"\t[i]{self.outs['i']}: {len(idkeys)-ndump} leaves ({ndump} dumped) {val / 2**20:.2f} MB\n")
+        idkeys = list(self.leaves['j'].keys())
+        ndump = 0
+        val = sys.getsizeof(self.leaves['j'])
+        for idkey in idkeys:
+            ileaf = self.leaves['j'][idkey]
+            if(ileaf is not None):
+                val += ileaf.size()
+            else:
+                ndump += 1
+        temp.append(f"\t[j]{self.outs['j']}: {len(idkeys)-ndump} leaves ({ndump} dumped) {val / 2**20:.2f} MB\n")
         tleaf = "".join(temp)        
 
         # For each iout, How many matched particles
@@ -412,75 +416,86 @@ class TreeBase:
             print(f"\n!!! {istep} is not in nstep({np.min(self.p.nstep)}~{np.max(self.p.nstep)}) !!!\n")
             traceback.print_stack()
 
-    def update_debugger(self, iout:int=None):
-        if iout is None:
-            for iout in self.dict_leaves.keys():
-                for jkey in self.dict_leaves[iout].keys():
-                    jleaf = self.load_leaf(iout, jkey)
-                    jleaf.logger = self.logger
-        else:
-            for jkey in self.dict_leaves[iout].keys():
-                jleaf = self.load_leaf(iout, jkey)
-                jleaf.logger = self.logger
-
+    def update_debugger(self, iorj:str):
+        for ikey in self.leaves[iorj].keys():
+            ileaf = self.load_leaf(iorj, ikey)
+            ileaf.logger = self.logger
 
 
     @_debug
-    def find_cands(self, iout:int, jout:int, mcut=0.01, prefix="", level='debug', verbose=0):
-        keys = list(self.dict_leaves[iout].keys())
-        jhalos = None
-        # backups = {}
-        for key in keys:
-            ileaf:Leaf = self.load_leaf(iout, key, prefix=prefix, level=level, verbose=verbose+1)
+    def find_cands(self, mcut=0.01, prefix="", level='debug', verbose=0):
+        """
+        Finds candidates based on certain conditions and performs calculations.
+        1) It starts by retrieving the keys from the 'i' and 'j' dictionaries stored in the leaves attribute.
+        2) For each key in ikeys, it loads the corresponding leaf object (ileaf).
+        3) It determines whether a calculation is required based on the relationship between the 'j' and 'i' values.
+        4) If a calculation is needed, it performs the main calculation, which involves filtering and manipulating data using numpy functions.
+        5) If no calculation is required, it retrieves pre-calculated values from the leaf object.
+        6) It generates a debugging message based on the number of candidates and prints it if the verbosity level allows.
+
+        Parameters:
+            `mcut` (float): Threshold value for candidate selection (default=0.01).
+            `prefix` (str): Prefix for debugging message (default="").
+            `level` (str): Debug level (default='debug').
+            `verbose` (int): Verbosity level (default=0).
+
+        Returns:
+            None
+        """
+        ikeys = list(self.leaves['i'].keys())
+        jkeys = list(self.leaves['j'].keys())
+        jhalos_mem = None
+        for key in ikeys:
+            ileaf:Leaf = self.load_leaf('i', key, prefix=prefix, level=level, verbose=verbose+1)
             # Calc, or not?
             calc = True
-            if(jout>iout):
+            if(self.outs['j']>self.outs['i']):
                 if(ileaf.desc is not None):
-                    if(jout in ileaf.desc[:,0]): calc=False
-            if(jout<iout):
+                    if(self.outs['j'] in ileaf.desc[:,0]): calc=False
+            if(self.outs['j']<self.outs['i']):
                 if(ileaf.prog is not None):
-                    if(jout in ileaf.prog[:,0]): calc=False
+                    if(self.outs['j'] in ileaf.prog[:,0]): calc=False
 
             # Main calculation
             if calc:
-                if jhalos is None:
-                    jhalos = self.read_part_halo_match(jout)
+                if jhalos_mem is None:
+                    jhalos_mem = self.read_part_halo_match(self.outs['j'])
                 pid = ileaf.pid
-                pid = pid[pid <= len(jhalos)]
-                hosts = jhalos[pid-1]
+                pid = pid[pid <= len(jhalos_mem)]
+                hosts = jhalos_mem[pid-1]
                 hosts = hosts[hosts>0]
                 hosts, count = np.unique(hosts, return_counts=True) # CPU?
                 hosts = hosts[count/len(pid) > mcut]
-                hosts = hosts[ np.isin(hosts, list(self.dict_leaves[jout].keys()),assume_unique=True) ]
+                hosts = hosts[ np.isin(hosts, jkeys, assume_unique=True) ]
                 if len(hosts)>0:
-                    otherleaves = [self.load_leaf(jout, iid, prefix=prefix, level=level, verbose=verbose+1) for iid in hosts]
-                    ids, scores = ileaf.calc_score(jout, otherleaves, prefix=f"<{ileaf._name}>",level='debug', verbose=verbose+1) # CPU?
+                    otherleaves = [self.load_leaf('j', iid, prefix=prefix, level=level, verbose=verbose+1) for iid in hosts]
+                    ids, scores = ileaf.calc_score(self.outs['j'], otherleaves, prefix=f"<{ileaf._name}>",level='debug', verbose=verbose+1) # CPU?
                 else:
-                    ids = np.array([[jout, 0]])
+                    ids = np.array([[self.outs['j'], 0]])
                     scores = np.array([[-10, -10, -10, -10, -10]])
-                if jout<iout:
+                if self.outs['j']<self.outs['i']:
                     ileaf.prog = ids if ileaf.prog is None else np.vstack((ileaf.prog, ids))
                     ileaf.prog_score = scores if ileaf.prog_score is None else np.vstack((ileaf.prog_score, scores))
                     ileaf.changed = True
-                elif jout>iout:
+                elif self.outs['j']>self.outs['i']:
                     ileaf.desc = ids if ileaf.desc is None else np.vstack((ileaf.desc, ids))
                     ileaf.desc_score = scores if ileaf.desc_score is None else np.vstack((ileaf.desc_score, scores))
                     ileaf.changed = True
                 else:
-                    raise ValueError(f"Same output {iout} and {jout}!")
+                    raise ValueError(f"Same output {self.outs['i']} and {self.outs['j']}!")
             
             # No need to calculation
             else:
-                if jout<iout:
-                    arg = ileaf.prog[:,0]==jout
+                if self.outs['j']<self.outs['i']:
+                    arg = ileaf.prog[:,0]==self.outs['j']
                     ids = ileaf.prog[arg]
                     scores = ileaf.prog_score[arg]
-                elif jout>iout:
-                    arg = ileaf.desc[:,0]==jout
+                elif self.outs['j']>self.outs['i']:
+                    arg = ileaf.desc[:,0]==self.outs['j']
                     ids = ileaf.desc[arg]
                     scores = ileaf.desc_score[arg]
                 else:
-                    raise ValueError(f"Same output {iout} and {jout}!")
+                    raise ValueError(f"Same output {self.outs['i']} and {self.outs['j']}!")
                 
             # Debugging message
             msg = f"{prefix}<{ileaf.name()}> has {len(ids)} candidates"
@@ -496,13 +511,31 @@ class TreeBase:
 
     @_debug
     def finalize(self, iout:int, prefix="", level='info', verbose=0):
+        """
+        Finalizes the backup file by combining and saving the individual pickled files into a single file.
+
+        Parameters
+        ----------
+        iout : int
+            The backup file index.
+        prefix : str, optional
+            Prefix to be added to log messages. Defaults to an empty string.
+        level : str, optional
+            Log level for printing messages. Defaults to 'info'.
+        verbose : int, optional
+            Verbosity level. Defaults to 0.
+
+        Raises
+        ------
+        FileNotFoundError
+            If the temporary backup file directory is not found.
+        """
         prefix2 = f"[Reduce Backup file] ({iout})"
+        if(os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}.pickle")):
+            return
         if not os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp"):
             raise FileNotFoundError(f"`{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp` is not found!")
         keys = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/keys.pickle")
-        # leaves = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp.pickle")
-        # if isinstance(leaves, dict):
-            # keys = list(leaves.keys())
         count = 0
         for key in keys:
             gal = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle")['gal']
@@ -512,96 +545,8 @@ class TreeBase:
         self.print(f"{prefix2} Save `{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}.pickle`", level=level)
         self.out_of_use.append(iout)
         shutil.rmtree(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp")
-        # os.remove(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp.pickle")
         self.print(f"{prefix2} Remove `{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp`", level=level)
         del gals
-        # else:
-        #     raise TypeError(f"Type of `{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp.pickle` is not dict!")
-
-    @_debug
-    def leaf_write(self, prefix="", level='info', verbose=0):
-        iouts = list(self.dict_leaves.keys())
-        for iout in iouts:
-            if(iout in self.out_of_use):
-                continue
-            if not (os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}.pickle")):
-                prefix2 = f"[leaf_write]({iout})"
-
-                keys = list(self.dict_leaves[iout].keys())
-                if(not os.path.isdir(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp")):
-                    os.mkdir(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp")
-                if(not os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/keys.pickle")):
-                    pklsave(keys, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/keys.pickle", overwrite=True)
-                # From
-                # leaves = {}
-                backup = {}
-                # if os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp.pickle"):
-                #     leaves = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp.pickle")
-                count = 0
-                for key in keys:
-                    if(self.dict_leaves[iout][key] is None): # Dumped
-                        continue
-                    leaf = self.load_leaf(iout, key, prefix=prefix, level=level, verbose=verbose+1)
-                    if leaf.changed:
-                        backup = {}
-                        if(os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle")):
-                            backup = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle")
-                        backup = leaf.selfsave(backup=backup)
-                        # backup = leaves[key] if(key in leaves.keys()) else {}
-                        # leaves[key] = leaf.selfsave(backup=backup)
-                        pklsave(backup, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle", overwrite=True)
-                        count += 1
-                    self.dict_leaves[iout][key] = None
-                # pklsave(leaves, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp.pickle", overwrite=True)
-                self.print(f"{prefix2} Write `{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp`", level=level)
-                self.print(f"{prefix2} {count}/{len(keys)} leaves", level=level)
-                # del leaves
-                del backup
-                # Here
-
-    @_debug
-    def leaf_read(self, iout:int, prefix="", level='info', verbose=0):
-        # leaves:dict=None
-        keys:list=None
-        if os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/keys.pickle"):
-            keys = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/keys.pickle")
-            # leaves = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp.pickle")
-        if(keys is None):
-            if(iout in self.banned_list): self.banned_list.remove(iout)
-            if(iout in self.out_of_use): self.out_of_use.remove(iout)
-        self.load_snap(iout, prefix=prefix, verbose=verbose+1, level=level) # INEFFICIENT
-        gals = self.load_gals(iout, galid='all', prefix=prefix, verbose=verbose+1, level=level)
-        
-        # if(leaves is None):
-        if(keys is None):
-            if(self.p.galaxy):
-                self.mainlog.info(f"[Queue] {len(gals)} {self.galstr}s at {iout}")
-            else:
-                try:
-                    self.mainlog.info(f"[Queue] {howmany(gals['mcontam']/gals['m'] < self.p.fcontam, True)}/{len(gals)} {self.galstr}s at {iout}")
-                except:
-                    self.mainlog.info(f"[Queue] {len(gals)} {self.galstr}s at {iout}")
-        galids = self.dict_gals[iout]['id'] if self.p.galaxy else self.dict_gals[iout]['id'][self.dict_pure[iout]]
-        for galid in galids:
-            if(galid in self.dict_leaves[iout].keys()):
-                if(self.dict_leaves[iout][galid] is not None):
-                    continue
-            backup:dict = None
-            if(os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{galid}.pickle")):
-                backup = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{galid}.pickle")
-            # if(leaves is not None):
-            #     if galid in leaves.keys():
-            #         backup = leaves[galid]
-            # if (backup is None) and (os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout}_leaf_{galid}.pkl")):
-            #     backup = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout}_leaf_{galid}.pkl")
-            # self.load_leaf(iout, galid, backup=backup, backups=leaves, prefix=prefix, verbose=verbose+1)
-            self.load_leaf(iout, galid, backup=backup, prefix=prefix, verbose=verbose+1, level='info')
-            # if(self.p.loadall):
-            #     break
-        # self.flush(iout, prefix=prefix, level=level)
-        leaves = None; del leaves
-        backup = None; del backup
-
 
 
 
@@ -733,9 +678,9 @@ class Leaf:
             arr = getattr(self, iattr)
             val += 0 if(arr is None) else arr.nbytes
         # Add dictionary
-        for key_iout in self.saved_matchrate.keys():
-            for key_id in self.saved_matchrate[key_iout].keys():
-                val += 0 if(self.saved_matchrate[key_iout][key_id] is None) else self.saved_matchrate[key_iout][key_id][1].nbytes
+        # for key_iout in self.saved_matchrate.keys():
+        #     for key_id in self.saved_matchrate[key_iout].keys():
+        #         val += 0 if(self.saved_matchrate[key_iout][key_id] is None) else self.saved_matchrate[key_iout][key_id][1].nbytes
         return val
 
     def summary(self):
@@ -833,19 +778,18 @@ class Leaf:
             self.saved_matchrate[jout] = {}
             self.changed = True
         if not otherleaf.id in self.saved_matchrate[jout].keys():
-            self.saved_matchrate[jout][otherleaf.id] = (val, ind)
+            # self.saved_matchrate[jout][otherleaf.id] = (val, ind)
+            self.saved_matchrate[jout][otherleaf.id] = val
             self.changed = True
         return val, ind
     
     def calc_matchrate(self, otherleaf:'Leaf', prefix="", level='debug', verbose=0) -> float:
-        calc = True
-        jout = otherleaf.iout
-        if jout in self.saved_matchrate.keys():
-            if otherleaf.id in self.saved_matchrate[jout].keys():
-                val, ind = self.saved_matchrate[jout][otherleaf.id]
-                calc = False
-        if calc:
-            val, ind = self._calc_matchrate(otherleaf, prefix=prefix, level=level, verbose=verbose)
+        # jout = otherleaf.iout
+        # if jout in self.saved_matchrate.keys():
+        #     if otherleaf.id in self.saved_matchrate[jout].keys():
+        #         val, ind = self.saved_matchrate[jout][otherleaf.id]
+        #         return val, ind
+        val, ind = self._calc_matchrate(otherleaf, prefix=prefix, level=level, verbose=verbose)
         return val, ind
 
     @_debug_leaf

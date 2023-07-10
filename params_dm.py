@@ -24,7 +24,7 @@ nice = 1
 #       False:    Use halo and DM
 galaxy = False
 fullpath=None
-loadall = True
+loadall = False
 usefortran = False
 fcontam = 0.1 # Ignore halos with contaminated greater than fcontam
 
