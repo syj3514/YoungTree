@@ -6,12 +6,14 @@ import sys
 try:
     parser = argparse.ArgumentParser(description='YoungTree subroutine')
     parser.add_argument("iout", metavar='iout', help='iout', type=int)
+    parser.add_argument("fout", metavar='fout', help='fout', type=int)
     parser.add_argument("reftot", metavar='reftot', help='reference time for total computation time', type=float)
     parser.add_argument("resultdir", metavar='resultdir', help='result_directory', type=str)
     parser.add_argument("logprefix", metavar='logprefix', help='prefix of logfile', type=str)
     parser.add_argument("mainlogname", metavar='mainlogname', help='name of mainlog', type=str)
     args = parser.parse_args()
     iout = args.iout
+    fout = args.fout
     reftot = args.reftot
     resultdir = args.resultdir
     logprefix = args.logprefix
@@ -30,7 +32,7 @@ try:
 
 
 
-    do_onestep(treebase, iout, reftot=reftot)
+    do_onestep(treebase, iout, fout, reftot=reftot)
 
 
 
