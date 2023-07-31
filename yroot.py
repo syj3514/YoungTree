@@ -79,6 +79,7 @@ class TreeBase:
         self.dict_snap = {} # in {iout}, RamsesSnapshot object
         self.dict_gals = {} # in {iout}, galaxy array object
         self.dict_pure = {}
+        self.avoid_filter = {}
         self.outs = {'i':None, 'j':None}
         self.leaves = {'i':{}, 'j':{}}
         self.out_on_table = []
@@ -152,12 +153,15 @@ class TreeBase:
                     gm = __load_gals(self, snap, galid=galid, prefix=prefix, level='debug', verbose=verbose+1)
                 else:
                     gm = uhmi.HaloMaker.load(snap, galaxy=self.p.galaxy, double_precision=self.p.dp, full_path=self.p.fullpath)
-                if not (self.p.galaxy):
-                    mask = gm['mcontam']/gm['m'] <= self.p.fcontam
-                    self.dict_pure[iout] = mask
+                # if not (self.p.galaxy):
+                # mask = gm['mcontam']/gm['m'] <= self.p.fcontam
+                mask = self.p.filtering(gm)
+                self.dict_pure[iout] = mask
                 self.dict_gals[iout] = gm
                 del snap
             _load_gals(self, iout,galid=galid, prefix=prefix, level=level, verbose=verbose)
+            if(not iout in self.avoid_filter.keys()):
+                self.avoid_filter[iout] = self.dict_gals[iout]['id'][self.dict_pure[iout]] if(iout==np.max(self.p.nout)) else None
         self.memory = GB()
         # Load
         if isinstance(galid,str):           # 'all'
@@ -190,10 +194,14 @@ class TreeBase:
         assert self.leaves[iorj] == {}
         snap = self.load_snap(iout, prefix=prefix)
         gals = self.load_gals(iout, galid='all', prefix=prefix, verbose=verbose+1)
-        if(not self.p.galaxy): gals = gals[self.dict_pure[iout]]
+        if(self.p.strict): gals = gals[self.dict_pure[iout]]
+        elif(iout==np.max(self.p.nout)): gals = gals[self.dict_pure[iout]]
+        else: pass
+
 
         if(os.path.isdir(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp")):
-            for igal in gals:
+            mask = np.isin(gals['id'], self.avoid_filter[iout], assume_unique=True)
+            for igal in gals[mask]:
                 backup = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{igal['id']}.pickle")
                 self.leaves[iorj][igal['id']] = Leaf(self, igal, None, snap, backup=backup)
         else:
@@ -233,20 +241,22 @@ class TreeBase:
             if( not os.path.isdir(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp") ):
                 os.mkdir(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp")
             if( not os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/keys.pickle") ):
-                pklsave(keys, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/keys.pickle", overwrite=True)
+                temp = [key for key in keys if(key in self.avoid_filter[iout])]
+                pklsave(temp, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/keys.pickle", overwrite=True)
             backup = {}
             count = 0
             for key in keys:
                 if( self.leaves[iorj][key] is None ): # Dumped
                     continue
-                leaf = self.load_leaf(iorj, key, prefix=prefix, level=level, verbose=verbose+1)
-                if( leaf.changed ):
-                    backup = {}
-                    if( os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle") ):
-                        backup = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle")
-                    backup = leaf.selfsave(backup=backup)
-                    pklsave(backup, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle", overwrite=True)
-                    count += 1
+                if(key in self.avoid_filter[iout]):
+                    leaf = self.load_leaf(iorj, key, prefix=prefix, level=level, verbose=verbose+1)
+                    if( leaf.changed ):
+                        backup = {}
+                        if( os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle") ):
+                            backup = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle")
+                        backup = leaf.selfsave(backup=backup)
+                        pklsave(backup, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle", overwrite=True)
+                        count += 1
                 self.leaves[iorj][key] = None
             self.print(f"{prefix2} Write `{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp`", level=level)
             self.print(f"{prefix2} {count}/{len(keys)} leaves", level=level)
@@ -366,7 +376,8 @@ class TreeBase:
         for idkey in idkeys:
             ileaf = self.leaves['i'][idkey]
             if(ileaf is not None):
-                val += ileaf.size()
+                if(not ileaf.contam):
+                    val += ileaf.size()
             else:
                 ndump += 1
         temp.append(f"\t[i]{self.outs['i']}: {len(idkeys)-ndump} leaves ({ndump} dumped) {val / 2**20:.2f} MB\n")
@@ -376,7 +387,8 @@ class TreeBase:
         for idkey in idkeys:
             ileaf = self.leaves['j'][idkey]
             if(ileaf is not None):
-                val += ileaf.size()
+                if(not ileaf.contam):
+                    val += ileaf.size()
             else:
                 ndump += 1
         temp.append(f"\t[j]{self.outs['j']}: {len(idkeys)-ndump} leaves ({ndump} dumped) {val / 2**20:.2f} MB\n")
@@ -423,101 +435,9 @@ class TreeBase:
             ileaf = self.load_leaf(iorj, ikey)
             ileaf.logger = self.logger
 
-    # def _find_cands_mp(self, arg):
-    #     ikey, jkeys, jhalos_mem, mcut, prefix = arg
-    def _find_cands_mp(self, ikey, jkeys, jhalos_mem, mcut, prefix):
-        c_proc = mp.current_process()
-        ileaf:Leaf = self.load_leaf('i', ikey, prefix=prefix, level='debug')
-        # Calc, or not?
-        calc = True
-        if(self.outs['j']>self.outs['i']):
-            if(ileaf.desc is not None):
-                if(self.outs['j'] in ileaf.desc[:,0]): calc=False
-        if(self.outs['j']<self.outs['i']):
-            if(ileaf.prog is not None):
-                if(self.outs['j'] in ileaf.prog[:,0]): calc=False
-        # Main calculation
-        if calc:
-            if jhalos_mem is None:
-                jhalos_mem = self.read_part_halo_match(self.outs['j'])
-            pid = ileaf.pid
-            pid = pid[pid <= len(jhalos_mem)]
-            hosts = jhalos_mem[pid-1]
-            hosts = hosts[hosts>0]
-            hosts, count = np.unique(hosts, return_counts=True) # CPU?
-            hosts = hosts[count/len(pid) > mcut]
-            hosts = hosts[ np.isin(hosts, jkeys, assume_unique=True) ]
-            # hosts = hosts[ large_isin(hosts, jkeys) ]
-            if len(hosts)>0:
-                otherleaves = [self.load_leaf('j', iid, prefix=prefix, level='debug') for iid in hosts]
-                ids, scores = ileaf.calc_score(self.outs['j'], otherleaves, prefix=f"<{ileaf._name}>",level='debug') # CPU?
-            else:
-                ids = np.array([[self.outs['j'], 0]])
-                scores = np.array([[-10, -10, -10, -10, -10]])
-        
-        # No need to calculation
-        else:
-            if self.outs['j']<self.outs['i']:
-                arg = ileaf.prog[:,0]==self.outs['j']
-                ids = ileaf.prog[arg]
-                scores = ileaf.prog_score[arg]
-            elif self.outs['j']>self.outs['i']:
-                arg = ileaf.desc[:,0]==self.outs['j']
-                ids = ileaf.desc[arg]
-                scores = ileaf.desc_score[arg]
-            else:
-                raise ValueError(f"Same output {self.outs['i']} and {self.outs['j']}!")        
-        return ikey, calc, ids, scores
 
     @_debug
-    def find_cands_mp(self, mcut=0.01, prefix="", level='debug', verbose=0):
-        ikeys = list(self.leaves['i'].keys())
-        jkeys = np.array(list(self.leaves['j'].keys()))
-        jhalos_mem = self.read_part_halo_match(self.outs['j'])
-        if(self.outs['j'] in self.part_halo_match.keys()):
-            if len(self.part_halo_match[self.outs['j']])>0:
-                jhalos_mem = None
-
-        # Multiprocessing
-        with Pool(processes=self.p.ncpu) as pool:
-            print(f"{cpu_count()} CPUs are available!")
-            print("Pool start!")
-            results = pool.starmap_async(self._find_cands_mp, [(ikey, jkeys, jhalos_mem, mcut, prefix) for ikey in ikeys], chunksize=self.p.ncpu)
-            print("wait!")
-            results.wait()
-            print("get!")
-            results = results.get()
-            print("Pool Done!")
-
-        
-        for ikey, calc, ids, scores in results:
-            ileaf:Leaf = self.load_leaf('i', ikey, prefix=prefix, level=level, verbose=verbose+1)
-            if(calc):
-                if self.outs['j']<self.outs['i']:
-                    ileaf.prog = ids if ileaf.prog is None else np.vstack((ileaf.prog, ids))
-                    ileaf.prog_score = scores if ileaf.prog_score is None else np.vstack((ileaf.prog_score, scores))
-                    ileaf.changed = True
-                elif self.outs['j']>self.outs['i']:
-                    ileaf.desc = ids if ileaf.desc is None else np.vstack((ileaf.desc, ids))
-                    ileaf.desc_score = scores if ileaf.desc_score is None else np.vstack((ileaf.desc_score, scores))
-                    ileaf.changed = True
-                else:
-                    raise ValueError(f"Same output {self.outs['i']} and {self.outs['j']}!")
-            # Debugging message
-            msg = f"{prefix}<{ileaf.name()}> has {len(ids)} candidates"
-            if len(ids)>0:
-                if np.sum(scores[0])>0:
-                    if len(ids) < 6:
-                        msg = f"{msg} {[f'{ids[i][-1]}({scores[i][0]:.3f})' for i in range(len(ids))]}"
-                    else:
-                        msg = f"{msg} {[f'{ids[i][-1]}({scores[i][0]:.3f})' for i in range(5)]+['...']}"
-                else:
-                    msg = f"{prefix}<{ileaf.name()}> has {len(ids)-1} candidates"
-            if(verbose <= self.p.verbose):self.print(msg, level='debug')
-
-
-    @_debug
-    def find_cands(self, mcut=0.01, prefix="", level='debug', verbose=0):
+    def find_cands(self, prefix="", level='debug', verbose=0):
         """
         Finds candidates based on certain conditions and performs calculations.
         1) It starts by retrieving the keys from the 'i' and 'j' dictionaries stored in the leaves attribute.
@@ -528,7 +448,6 @@ class TreeBase:
         6) It generates a debugging message based on the number of candidates and prints it if the verbosity level allows.
 
         Parameters:
-            `mcut` (float): Threshold value for candidate selection (default=0.01).
             `prefix` (str): Prefix for debugging message (default="").
             `level` (str): Debug level (default='debug').
             `verbose` (int): Verbosity level (default=0).
@@ -559,11 +478,13 @@ class TreeBase:
                 hosts = jhalos_mem[pid-1]
                 hosts = hosts[hosts>0]
                 hosts, count = np.unique(hosts, return_counts=True) # CPU?
-                hosts = hosts[count/len(pid) > mcut]
+                hosts = hosts[count/len(pid) > self.p.mcut]
                 hosts = hosts[ np.isin(hosts, jkeys, assume_unique=True) ] # Short, so no need to use large_isin
                 if len(hosts)>0:
                     otherleaves = [self.load_leaf('j', iid, prefix=prefix, level=level, verbose=verbose+1) for iid in hosts]
+                    otherleaves = [ileaf for ileaf in otherleaves if(not ileaf.contam)]
                     ids, scores = ileaf.calc_score(self.outs['j'], otherleaves, prefix=f"<{ileaf._name}>",level='debug', verbose=verbose+1) # CPU?
+                    self.avoid_filter[self.outs['j']] = ids.flatten() if(self.avoid_filter[self.outs['j']] is None) else np.union1d(self.avoid_filter[self.outs['j']], ids.flatten())
                 else:
                     ids = np.array([[self.outs['j'], 0]])
                     scores = np.array([[-10, -10, -10, -10, -10]])
@@ -708,9 +629,11 @@ class Leaf:
         self.logger = base.logger
         self.contam = False
         try:
-            if self.cat['mcontam']/self.cat['m'] > self.base.p.fcontam:
+            if(not self.base.p.filtering(self.cat)):
+            # if self.cat['mcontam']/self.cat['m'] > self.base.p.fcontam:
                 self.contam = True
-            self._name = f"L{self.id} at {self.iout} ({int(100*self.cat['mcontam']/self.cat['m'])}%)"
+            if(not self.base.p.galaxy):
+                self._name = f"L{self.id} at {self.iout} ({int(100*self.cat['mcontam']/self.cat['m'])}%)"
         except:
             pass
         
