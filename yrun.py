@@ -43,6 +43,7 @@ def do_onestep(Tree:'TreeBase', iout:int, fout:int, reftot:float=time.time()):
     nstep = Tree.p.nstep
     resultdir = Tree.p.resultdir
     set_num_threads(Tree.p.ncpu)
+    time_record = []
     try:
         ref = time.time()
         skip = False
@@ -51,24 +52,33 @@ def do_onestep(Tree:'TreeBase', iout:int, fout:int, reftot:float=time.time()):
         Tree.mainlog = follow_log(logname, detail=Tree.p.detail)
         # Fully saved
         if os.path.exists(f"{resultdir}/by-product/{Tree.p.logprefix}{iout:05d}.pickle"):
-            Tree.mainlog.info(f"[Queue] {iout} is done --> Skip\n")
-            skip=True
+            if(not Tree.p.takeover):
+                Tree.mainlog.warning(f"! No takeover ! Remove `{resultdir}/by-product/{Tree.p.logprefix}{iout:05d}.pickle`")
+                os.remove(f"{resultdir}/by-product/{Tree.p.logprefix}{iout:05d}.pickle")
+            else:
+                Tree.mainlog.info(f"[Queue] {iout} is done --> Skip\n")
+                skip=True
         
     
         # Main process
         if not skip:
             # New log file
+            t0 = time.time()
             Tree.mainlog.info(f"[Queue] {iout} start")
             Tree.logger, _, newlog = make_log(Tree.p.repo, f"{iout:05d}", detail=Tree.p.detail, prefix=Tree.p.logprefix, path_in_repo="YoungTree/log")
             Tree.mainlog.info(f"See `{newlog}`\n")
+            time_record.append(["Making New Log", time.time()-t0]); t0 = time.time()
             
             # Load snap gal part
             Tree.logger.info(f"\n\nStart at iout={iout}\n")
             if(Tree.leaves['i']!={}):
+                Tree.logger.info(f"[slot i] {Tree.outs['i']} -> {iout}")
                 Tree.write_leaves('i', level='info')
-                Tree.leaves['i']={} # Is this best??? (Summary error)
+                Tree.leaves['i']={}
+                time_record.append([f"Write leaves at {Tree.outs['i']}", time.time()-t0]); t0 = time.time()
             Tree.outs['i'] = iout
             Tree.read_leaves('i', level='info')
+            time_record.append([f"Read leaves at {Tree.outs['i']}", time.time()-t0]); t0 = time.time()
             Tree.update_debugger('i')
             Tree.logger.info(f"\n{Tree.summary()}\n")
             Tree.logger.info("\n----------------\nFind progenitors\n----------------\n")
@@ -80,16 +90,21 @@ def do_onestep(Tree:'TreeBase', iout:int, fout:int, reftot:float=time.time()):
                     jout = Tree.step2out(jstep)
                     Tree.logger.info(f"\n\nProgenitor at jout={jout}\n")
                     if(Tree.leaves['j']!={}):
+                        Tree.logger.info(f"[slot j] {Tree.outs['j']} -> {jout}")
                         Tree.write_leaves('j', level='info')
                         Tree.leaves['j']={}
+                        time_record.append([f"Write leaves at {Tree.outs['j']}", time.time()-t0]); t0 = time.time()
                     Tree.outs['j'] = jout
                     Tree.read_leaves('j', level='info')
+                    time_record.append([f"Read leaves at {Tree.outs['j']}", time.time()-t0]); t0 = time.time()
                     Tree.update_debugger('j')
                     Tree.logger.info(f"\n{Tree.summary()}\n")
                     Tree.logger.info("\n")
                     Tree.find_cands(level='info')
+                    time_record.append([f"Find candidates {Tree.outs['i']}<->{Tree.outs['j']}", time.time()-t0]); t0 = time.time()
                     Tree.flush(jout, level='info')
             Tree.write_leaves('j', level='info')
+            time_record.append([f"Write leaves at {Tree.outs['j']}", time.time()-t0]); t0 = time.time()
             Tree.leaves['j']={}
             
             Tree.logger.info("\n----------------\nFind descendants\n----------------\n")
@@ -100,17 +115,23 @@ def do_onestep(Tree:'TreeBase', iout:int, fout:int, reftot:float=time.time()):
                     jout = Tree.step2out(jstep)
                     Tree.logger.info(f"\n\nDescendant at jout={jout}\n")
                     if(Tree.leaves['j']!={}):
+                        Tree.logger.info(f"[slot j] {Tree.outs['j']} -> {jout}")
                         Tree.write_leaves('j', level='info')
                         Tree.leaves['j']={}
+                        time_record.append([f"Write leaves at {Tree.outs['j']}", time.time()-t0]); t0 = time.time()
                     Tree.outs['j'] = jout
                     Tree.read_leaves('j', level='info')
+                    time_record.append([f"Read leaves at {Tree.outs['j']}", time.time()-t0]); t0 = time.time()
                     Tree.update_debugger('j')
                     Tree.logger.info(f"\n{Tree.summary()}\n")
                     Tree.logger.info("\n")
                     Tree.find_cands(level='info')
+                    time_record.append([f"Find candidates {Tree.outs['i']}<->{Tree.outs['j']}", time.time()-t0]); t0 = time.time()
                     Tree.flush(jout, level='info')
             Tree.logger.info("\n----------------\nFlush Redundants\n----------------\n")
+            Tree.logger.info(f"[slot j] Dump {Tree.outs['j']}")
             Tree.write_leaves('j', level='info')
+            time_record.append([f"Write leaves at {Tree.outs['j']}", time.time()-t0]); t0 = time.time()
             Tree.leaves['j']={}
             
             # Flush redundant snapshots
@@ -124,22 +145,28 @@ def do_onestep(Tree:'TreeBase', iout:int, fout:int, reftot:float=time.time()):
                             Tree.out_of_use.append(out)
                         else:
                             Tree.finalize(out, level='info')
+                            time_record.append([f"Finalize {out}", time.time()-t0]); t0 = time.time()
                         Tree.out_on_table.remove(out)
                         Tree.flush(out, level='info')        
                         Tree.logger.info(f"\n{Tree.summary()}\n")
             Tree.logger.info("\n----------------\nBackup leaf files\n----------------\n")
             # Backup files
+            Tree.logger.info(f"[slot i] Dump {Tree.outs['i']}")
             Tree.write_leaves('i', level='info')
             Tree.leaves['i']={}
+            time_record.append([f"Write leaves at {Tree.outs['i']}", time.time()-t0]); t0 = time.time()
             Tree.logger.info(f"\n{Tree.summary()}\n")
             treerecord(iout, nout[nout<=fout], time.time()-ref, time.time()-reftot, Tree.mainlog)
     except Exception as e:
-        print(); Tree.logger.error("")
+        print("\n\n"); Tree.logger.error("\n\n")
         print(traceback.format_exc()); Tree.logger.error(traceback.format_exc())
+        print("\n\n"); Tree.logger.error("\n\n")
         print(e); Tree.logger.error(e)
         Tree.logger.error(Tree.summary())
         print("\nIteration is terminated (`do_onestep`)\n"); Tree.logger.error("\nIteration is terminated (`do_onestep`)\n")
         sys.exit(1)
+    
+    return time_record
         
 
 
@@ -766,8 +793,8 @@ class memory_tracker():
         self.ref = MB()
 
 class timer():
-    __slots__ = ['ref', 'units', 'corr', 'unit', 'text', 'verbose', 'logger', 'level']
-    def __init__(self, unit:str="sec",text:str="", verbose:bool=True, logger:logging.Logger=None, level:str='info'):
+    __slots__ = ['ref', 'units', 'corr', 'unit', 'text', 'verbose', 'logger', 'level', 'mint']
+    def __init__(self, unit:str="sec",text:str="", verbose:bool=True, logger:logging.Logger=None, level:str='info', mint:float=0):
         self.ref = time.time()
         self.units = {"ms":1/1000, "sec":1, "min":60, "hr":3600}
         self.corr = self.units[unit]
@@ -776,6 +803,7 @@ class timer():
         self.verbose=verbose
         self.logger=logger
         self.level = level
+        self.mint = mint
         if(self.verbose):
             if self.logger is not None:
                 if self.level == 'info': self.logger.info(f"{text} START")
@@ -785,11 +813,12 @@ class timer():
     def done(self, add=None):
         if(self.verbose):
             elapse = time.time()-self.ref
-            if add is not None: self.text = f"{self.text} {add}"
-            if self.logger is not None:
-                if self.level == 'info': self.logger.info(f"{self.text} Done ({elapse/self.corr:.3f} {self.unit})")
-                else: self.logger.debug(f"{self.text} Done ({elapse/self.corr:.3f} {self.unit})")
-            else: print(f"{self.text} Done ({elapse/self.corr:.3f} {self.unit})")
+            if(elapse>=self.mint):
+                if add is not None: self.text = f"{self.text} {add}"
+                if self.logger is not None:
+                    if self.level == 'info': self.logger.info(f"{self.text} Done ({elapse/self.corr:.3f} {self.unit})")
+                    else: self.logger.debug(f"{self.text} Done ({elapse/self.corr:.3f} {self.unit})")
+                else: print(f"{self.text} Done ({elapse/self.corr:.3f} {self.unit})")
 
 import threading
 class DisplayCPU(threading.Thread):

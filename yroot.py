@@ -29,7 +29,7 @@ def _debug(func):
         level = kwargs.pop("level","debug"); kwargs["level"] = level
 
         if ontime:
-            clock=timer(text=prefix, logger=logger, verbose=verbose, level=level)
+            clock=timer(text=prefix, logger=logger, verbose=verbose, level=level, mint=p.mint)
         if onmem:
             mem = MB()
         if oncpu:
@@ -80,6 +80,7 @@ class TreeBase:
         self.dict_gals = {} # in {iout}, galaxy array object
         self.dict_pure = {}
         self.avoid_filter = {}
+        self.last_pids = None
         self.outs = {'i':None, 'j':None}
         self.leaves = {'i':{}, 'j':{}}
         self.out_on_table = []
@@ -87,6 +88,7 @@ class TreeBase:
         self.part_halo_match = {} # in {iout}, list of int
         self.banned_list = []
         self.out_of_use = []
+        self.accesed = []
         gc.collect()
 
         self.ontime = self.p.ontime
@@ -108,6 +110,7 @@ class TreeBase:
         if not iout in self.dict_snap.keys():
             @_debug
             def _load_snap(self, iout:int, prefix:str="", level='info', verbose=verbose):
+                if(not iout in self.accesed): self.accesed.append(iout)
                 path_in_repo="" if self.p.mode[0] == '/' else "snapshots"
                 snap = uri.RamsesSnapshot(self.p.repo, iout, mode=self.p.rurmode, path_in_repo=path_in_repo)
                 if(self.p.loadall)and(not iout in self.banned_list):
@@ -158,6 +161,9 @@ class TreeBase:
                 mask = self.p.filtering(gm)
                 self.dict_pure[iout] = mask
                 self.dict_gals[iout] = gm
+                if(not self.p.default)and(iout == np.max(self.p.nout)):
+                    self.last_pids = large_isind(self.part_halo_match[iout], gm[mask]['id'])
+                    self.print(f"Not default mode: {len(self.last_pids)} particles are selected.", level="info")
                 del snap
             _load_gals(self, iout,galid=galid, prefix=prefix, level=level, verbose=verbose)
             if(not iout in self.avoid_filter.keys()):
@@ -192,28 +198,53 @@ class TreeBase:
         
         iout = self.outs[iorj]
         assert self.leaves[iorj] == {}
+        if(iout not in self.accesed)and(not self.p.takeover):
+            if(os.path.isdir(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp")):
+                self.mainlog.warning(f"! No takeover ! Remove `{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp`")
+                shutil.rmtree(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp")
         snap = self.load_snap(iout, prefix=prefix)
         gals = self.load_gals(iout, galid='all', prefix=prefix, verbose=verbose+1)
         if(self.p.strict): gals = gals[self.dict_pure[iout]]
         elif(iout==np.max(self.p.nout)): gals = gals[self.dict_pure[iout]]
         else: pass
 
+        prefix2 = f"[read_leaves]({iout})"
 
         if(os.path.isdir(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp")):
             mask = np.isin(gals['id'], self.avoid_filter[iout], assume_unique=True)
             for igal in gals[mask]:
-                backup = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{igal['id']}.pickle")
-                self.leaves[iorj][igal['id']] = Leaf(self, igal, None, snap, backup=backup)
+                if(os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{igal['id']}.pickle")):
+                    backup = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{igal['id']}.pickle")
+                    self.leaves[iorj][igal['id']] = Leaf(self, igal, None, snap, backup=backup)
+                else:
+                    self.print(f"{prefix2} Add new {iorj}leaf")
+                    part = uhmi.HaloMaker.read_member_part(snap, igal['id'], galaxy=self.p.galaxy, full_path=self.p.fullpath, usefortran=self.p.usefortran)
+                    self.leaves[iorj][igal['id']] = Leaf(self, igal, part.table, snap, backup=None)
         else:
             if(self.p.loadall):
                 partmatch = self.read_part_halo_match(iout)
-                for igal in gals:
+                if(not self.p.default)and(self.last_pids is not None):
+                    temp = self.last_pids[self.last_pids < len(partmatch)]
+                    temp = gals[np.isin(gals['id'], np.unique(partmatch[temp]), assume_unique=True)]
+                    self.print(f"{prefix2} Not default mode: At {iout}, {len(gals)} -> {len(temp)} based on last particles")
+                    self.print(temp['id'])
+                else:
+                    temp = gals
+                for igal in temp:
                     self.leaves[iorj][igal['id']] = Leaf(self, igal, snap.part.table[np.where(partmatch == igal['id'])[0]], snap, backup=None)
                 snap.clear()
                 del partmatch, gals
                 self.banned_list.append(iout)
             else:
-                for igal in gals:
+                if(not self.p.default)and(self.last_pids is not None):
+                    partmatch = self.read_part_halo_match(iout)
+                    temp = self.last_pids[self.last_pids < len(partmatch)]
+                    temp = gals[np.isin(gals['id'], np.unique(partmatch[temp]), assume_unique=True)]
+                    self.print(f"{prefix2} Not default mode: At {iout}, {len(gals)} -> {len(temp)} based on last particles")
+                    self.print(temp['id'])
+                else:
+                    temp = gals
+                for igal in temp:
                     part = uhmi.HaloMaker.read_member_part(snap, igal['id'], galaxy=self.p.galaxy, full_path=self.p.fullpath, usefortran=self.p.usefortran)
                     self.leaves[iorj][igal['id']] = Leaf(self, igal, part.table, snap, backup=None)
                 del part
@@ -243,6 +274,12 @@ class TreeBase:
             if( not os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/keys.pickle") ):
                 temp = [key for key in keys if(key in self.avoid_filter[iout])]
                 pklsave(temp, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/keys.pickle", overwrite=True)
+            else:
+                temp1 = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/keys.pickle"); temp1.sort()
+                temp2 = [key for key in keys if(key in self.avoid_filter[iout])]; temp2.sort()
+                if( temp1 != temp2 ):
+                    self.print(f"{prefix2} Update keys: \n{temp1} \n-> \n{temp2}")
+                    pklsave(temp2, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/keys.pickle", overwrite=True)
             backup = {}
             count = 0
             for key in keys:
@@ -483,6 +520,8 @@ class TreeBase:
                 if len(hosts)>0:
                     otherleaves = [self.load_leaf('j', iid, prefix=prefix, level=level, verbose=verbose+1) for iid in hosts]
                     otherleaves = [ileaf for ileaf in otherleaves if(not ileaf.contam)]
+                    # Change above
+                    # If contam, remake that leaf
                     ids, scores = ileaf.calc_score(self.outs['j'], otherleaves, prefix=f"<{ileaf._name}>",level='debug', verbose=verbose+1) # CPU?
                     self.avoid_filter[self.outs['j']] = ids.flatten() if(self.avoid_filter[self.outs['j']] is None) else np.union1d(self.avoid_filter[self.outs['j']], ids.flatten())
                 else:
@@ -523,6 +562,7 @@ class TreeBase:
                 else:
                     msg = f"{prefix}<{ileaf.name()}> has {len(ids)-1} candidates"
             if(verbose <= self.p.verbose):self.print(msg, level='debug')
+        if(not self.p.default): self.print(f"Pass filtered at {self.outs['j']}: ({len(self.avoid_filter[self.outs['j']])}){self.avoid_filter[self.outs['j']]}")
 
     @_debug
     def finalize(self, iout:int, prefix="", level='info', verbose=0):
@@ -586,7 +626,7 @@ def _debug_leaf(func):
         level = kwargs.pop("level","debug"); kwargs["level"]=level
 
         if ontime:
-            clock=timer(text=prefix, logger=logger, verbose=verbose, level=level)
+            clock=timer(text=prefix, logger=logger, verbose=verbose, level=level, mint=Tree.p.mint)
         if onmem:
             mem = MB()
         if oncpu:
@@ -629,14 +669,15 @@ class Leaf:
         self.logger = base.logger
         self.contam = False
         try:
-            if(not self.base.p.filtering(self.cat)):
+            if(self.base.p.strict)and(not self.base.p.filtering(self.cat)):
             # if self.cat['mcontam']/self.cat['m'] > self.base.p.fcontam:
                 self.contam = True
             if(not self.base.p.galaxy):
                 self._name = f"L{self.id} at {self.iout} ({int(100*self.cat['mcontam']/self.cat['m'])}%)"
         except:
             pass
-        
+        if(self.base.avoid_filter[self.iout] is not None):
+            if(self.id in self.base.avoid_filter[self.iout]): self.contam=False
         # Mem part
         if not self.contam:
             if(backup is not None):
@@ -820,7 +861,7 @@ class Leaf:
         val, ind = self._calc_matchrate(otherleaf, prefix=prefix, level=level, verbose=verbose)
         return val, ind
 
-    @_debug_leaf
+    # @_debug_leaf
     def calc_bulkmotion(self, checkind:list[bool]=None, prefix="", level='debug', verbose=0):
         if checkind is None:
             checkind = np.full(self.nparts, True)

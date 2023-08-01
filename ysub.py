@@ -32,7 +32,7 @@ try:
 
 
 
-    do_onestep(treebase, iout, fout, reftot=reftot)
+    time_record = do_onestep(treebase, iout, fout, reftot=reftot)
 
 
 
@@ -42,6 +42,18 @@ try:
         treebase.flush(iout)
     pklsave(treebase, f"{resultdir}/{logprefix}treebase.temp.pickle", overwrite=True)
     treebase.print(f"\niout={iout} done\n", level='info')
+    msgs = [msg[0] for msg in time_record]
+    times = [msg[1] for msg in time_record]
+    total_time = np.sum(times)
+    treebase.print(f"Total time: {total_time:.2f} sec", level='info')
+    maxmsg = 'none'
+    maxtime = 0
+    for imsg, itime in zip(msgs, times):
+        if(itime > maxtime):
+            maxmsg = imsg
+            maxtime = itime
+        treebase.print(f"\t[{itime/total_time*100:05.2f} %] {imsg}: {itime:.2f} sec", level='info')
+    treebase.print(f"\n\t`{maxmsg}` is bottleneck ({maxtime:.2f} sec)", level='info')
     del treebase
 except Exception as e:
     print("[Error in `ysub.py`]")

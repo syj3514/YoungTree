@@ -19,7 +19,7 @@ mode = "y06098" #   Simulation name (should be supported by rur)
 galaxy = True # True: galaxy, False: halo
 fullpath=None # Full path to the HaloMaker output directory
 nsnap = 5 # The number of snapshots to be considered when making trees
-mcut = 0.01# Number fraction threshold for the prog/desc candidates
+mcut = 0.001# Number fraction threshold for the prog/desc candidates
 
 
 
@@ -36,7 +36,7 @@ mcut = 0.01# Number fraction threshold for the prog/desc candidates
 ncpu = 36 # Set nthread in numba and OpenMP
 loadall = False # Load all galaxies and particles at once
 usefortran = False # Use Fortran for particle loading
-overwrite = True # Deprecated
+takeover = True # If True, the treebase is taken over from the previous run
 flushGB = 100 # Memory threshold for auto-flush in Gigabytes
 nice = 1 # set os nice value
 
@@ -50,12 +50,14 @@ nice = 1 # set os nice value
 #       These parameters decide the logging format
 #---------------------------------------------------------------------
 
+path_in_repo = "YoungTree" # Where output and log files are saved
 logprefix = f"ytree_massive_" # file name of ytree log (./logprefix_iout.log)
 detail = True # Detail debugging in log (True: DEBUG level, False: INFO level)
 ontime = True # Time check
 onmem = False # Memory check
 oncpu = False # CPU check
 verbose = 5 # Verbosity level (0: quiet, 5: verbose)
+mint = 1 # Minimum time for logging (`Done` prints only if t > mint)
 
 
 
@@ -78,11 +80,12 @@ verbose = 5 # Verbosity level (0: quiet, 5: verbose)
 #         However, in other snapshots, if the galaxy is not selected as a progenitor and
 #         if the galaxy is not satisfied, the galaxy is removed from the tree.
 #---------------------------------------------------------------------
-strict = False
+default = False
 # def filtering(gals):
 #     import numpy as np
 #     return np.ones(len(gals), dtype=bool)
 
+strict = False
 # Example 1) Mass cut
 def filtering(gals):
     import numpy as np

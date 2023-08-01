@@ -23,10 +23,10 @@ if __name__=='__main__':
     # Read params
     params = make_params_dict(args.params, mode=args.mode)
     if(params.nice>0): os.nice(params.nice)
-    mainlog, resultdir,_ = make_log(params.repo, "main", detail=params.detail, prefix=params.logprefix)
+    mainlog, resultdir,fname = make_log(params.repo, "main", detail=params.detail, prefix=params.logprefix, path_in_repo=params.path_in_repo)
     params.resultdir = resultdir
     mainlog.info(f"\nAllow {params.flushGB:.2f} GB Memory\n"); print(f"\nAllow {params.flushGB:.2f} GB Memory\n")
-    mainlog.info(f"\nSee `{params.resultdir}`\n"); print(f"\nSee `{params.resultdir}`\n")
+    mainlog.info(f"\nSee `{fname}`\n"); print(f"\nSee `{fname}`\n")
     if(args.ncpu is not None): params.ncpu = args.ncpu
     set_num_threads(params.ncpu)
 
@@ -39,7 +39,7 @@ if __name__=='__main__':
             if not os.path.exists(f"{params.resultdir}/{params.logprefix}fatson.pickle"):
                 if not os.path.exists(f"{params.resultdir}/{params.logprefix}all.pickle"):
                     if not os.path.exists(f"{params.resultdir}/by-product/{params.logprefix}checkpoint.pickle"):
-                        if(not os.path.exists(f"{params.resultdir}/{params.logprefix}treebase.temp.pickle")):
+                        if(not os.path.exists(f"{params.resultdir}/{params.logprefix}treebase.temp.pickle"))or(not params.takeover):
                             treebase = yroot.TreeBase(params, logger=mainlog)
                             pklsave(treebase, f"{params.resultdir}/{params.logprefix}treebase.temp.pickle", overwrite=True)
                             del treebase
@@ -47,8 +47,12 @@ if __name__=='__main__':
                         fout = np.max(params.nout)
                         for iout in params.nout:
                             if os.path.exists(f"{params.resultdir}/by-product/{params.logprefix}{iout:05d}.pickle"):
-                                fout = np.max(params.nout[params.nout<iout])
-                                continue
+                                if(params.takeover):
+                                    fout = np.max(params.nout[params.nout<iout])
+                                    continue
+                                else:
+                                    mainlog.warning(f"! No takeover ! Remove `{resultdir}/by-product/{params.logprefix}{iout:05d}.pickle`")
+                                    os.remove(f"{params.resultdir}/by-product/{params.logprefix}{iout:05d}.pickle")
                             subdir = os.getcwd()
                             if(not 'YoungTree' in subdir): subdir = f"{subdir}/YoungTree"
 
@@ -96,13 +100,13 @@ if __name__=='__main__':
                     mainlog.info("\nGather Done\n"); print("\nGather Done\n")
                     
                 mainlog.info("\nConnect Start\n"); print("\nConnect Start\n")
-                connectlog, resultdir,_ = make_log(params.repo, "connect", detail=params.detail, prefix=params.logprefix)
+                connectlog, resultdir,_ = make_log(params.repo, "connect", detail=params.detail, prefix=params.logprefix, path_in_repo=params.path_in_repo)
                 func = DebugDecorator(connect, params=params, logger=connectlog)
                 func(params, connectlog)
                 mainlog.info("\nConnect Done\n"); print("\nConnect Done\n")
 
             mainlog.info("\nBuild Start\n"); print("\nBuild Start\n")
-            buildlog, resultdir,_ = make_log(params.repo, "build", detail=params.detail, prefix=params.logprefix)
+            buildlog, resultdir,_ = make_log(params.repo, "build", detail=params.detail, prefix=params.logprefix, path_in_repo=params.path_in_repo)
             func = DebugDecorator(build_branch, params=params, logger=buildlog)
             func(params, buildlog)
             mainlog.info("\nBuild Done\n"); print("\nBuild Done\n")

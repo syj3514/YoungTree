@@ -35,7 +35,7 @@ mcut = 0.01# Number fraction threshold for the prog/desc candidates
 ncpu = 24 # Set nthread in numba and OpenMP
 loadall = False # Load all galaxies and particles at once
 usefortran = False # Use Fortran for particle loading
-overwrite = True # Deprecated
+takeover = True # If True, the treebase is taken over from the previous run
 flushGB = 100 # Memory threshold for auto-flush in Gigabytes
 nice = 1 # set os nice value
 
@@ -49,13 +49,14 @@ nice = 1 # set os nice value
 #       These parameters decide the logging format
 #---------------------------------------------------------------------
 
+path_in_repo = "YoungTree" # Where output and log files are saved
 logprefix = f"ytree_" # file name of ytree log (./logprefix_iout.log)
 detail = False # Detail debugging in log (True: DEBUG level, False: INFO level)
 ontime = True # Time check
 onmem = False # Memory check
 oncpu = False # CPU check
 verbose = 5 # Verbosity level (0: quiet, 5: verbose)
-
+mint = 1 # Minimum time for logging (`Done` prints only if t > mint)
 
 
 
