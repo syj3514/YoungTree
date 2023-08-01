@@ -167,7 +167,12 @@ class TreeBase:
                 del snap
             _load_gals(self, iout,galid=galid, prefix=prefix, level=level, verbose=verbose)
             if(not iout in self.avoid_filter.keys()):
-                self.avoid_filter[iout] = self.dict_gals[iout]['id'][self.dict_pure[iout]] if(iout==np.max(self.p.nout)) else None
+                if(iout==np.max(self.p.nout)):
+                    self.avoid_filter[iout] = self.dict_gals[iout]['id'][self.dict_pure[iout]]
+                else:
+                    self.avoid_filter[iout] = None
+                    if(os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/keys.pickle")):
+                        self.avoid_filter[iout] = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/keys.pickle")
         self.memory = GB()
         # Load
         if isinstance(galid,str):           # 'all'
@@ -269,32 +274,33 @@ class TreeBase:
             prefix2 = f"[write_leaves]({iout})"
 
             keys = list(self.leaves[iorj].keys())
+            count = 0
             if( not os.path.isdir(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp") ):
                 os.mkdir(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp")
-            if( not os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/keys.pickle") ):
-                temp = [key for key in keys if(key in self.avoid_filter[iout])]
-                pklsave(temp, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/keys.pickle", overwrite=True)
-            else:
-                temp1 = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/keys.pickle"); temp1.sort()
-                temp2 = [key for key in keys if(key in self.avoid_filter[iout])]; temp2.sort()
-                if( temp1 != temp2 ):
-                    self.print(f"{prefix2} Update keys: \n{temp1} \n-> \n{temp2}")
-                    pklsave(temp2, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/keys.pickle", overwrite=True)
-            backup = {}
-            count = 0
-            for key in keys:
-                if( self.leaves[iorj][key] is None ): # Dumped
-                    continue
-                if(key in self.avoid_filter[iout]):
-                    leaf = self.load_leaf(iorj, key, prefix=prefix, level=level, verbose=verbose+1)
-                    if( leaf.changed ):
-                        backup = {}
-                        if( os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle") ):
-                            backup = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle")
-                        backup = leaf.selfsave(backup=backup)
-                        pklsave(backup, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle", overwrite=True)
-                        count += 1
-                self.leaves[iorj][key] = None
+            if(len(keys)>0):
+                if( not os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/keys.pickle") ):
+                    temp = [key for key in keys if(key in self.avoid_filter[iout])]
+                    pklsave(temp, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/keys.pickle", overwrite=True)
+                else:
+                    temp1 = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/keys.pickle"); temp1.sort()
+                    temp2 = [key for key in keys if(key in self.avoid_filter[iout])]; temp2.sort()
+                    if( temp1 != temp2 ):
+                        self.print(f"{prefix2} Update keys: \n{temp1} \n-> \n{temp2}")
+                        pklsave(temp2, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/keys.pickle", overwrite=True)
+                backup = {}
+                for key in keys:
+                    if( self.leaves[iorj][key] is None ): # Dumped
+                        continue
+                    if(key in self.avoid_filter[iout]):
+                        leaf = self.load_leaf(iorj, key, prefix=prefix, level=level, verbose=verbose+1)
+                        if( leaf.changed ):
+                            backup = {}
+                            if( os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle") ):
+                                backup = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle")
+                            backup = leaf.selfsave(backup=backup)
+                            pklsave(backup, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle", overwrite=True)
+                            count += 1
+                    self.leaves[iorj][key] = None
             self.print(f"{prefix2} Write `{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp`", level=level)
             self.print(f"{prefix2} {count}/{len(keys)} leaves", level=level)
             del backup
@@ -543,10 +549,12 @@ class TreeBase:
                 if self.outs['j']<self.outs['i']:
                     arg = ileaf.prog[:,0]==self.outs['j']
                     ids = ileaf.prog[arg]
+                    if(self.avoid_filter[self.outs['j']] is None): self.avoid_filter[self.outs['j']] = ids.flatten()
                     scores = ileaf.prog_score[arg]
                 elif self.outs['j']>self.outs['i']:
                     arg = ileaf.desc[:,0]==self.outs['j']
                     ids = ileaf.desc[arg]
+                    if(self.avoid_filter[self.outs['j']] is None): self.avoid_filter[self.outs['j']] = ids.flatten()
                     scores = ileaf.desc_score[arg]
                 else:
                     raise ValueError(f"Same output {self.outs['i']} and {self.outs['j']}!")

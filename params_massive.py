@@ -50,8 +50,8 @@ nice = 1 # set os nice value
 #       These parameters decide the logging format
 #---------------------------------------------------------------------
 
-path_in_repo = "YoungTree" # Where output and log files are saved
-logprefix = f"ytree_massive_" # file name of ytree log (./logprefix_iout.log)
+path_in_repo = "YoungTree_Massive" # Where output and log files are saved
+logprefix = f"ytree_" # file name of ytree log (./logprefix_iout.log)
 detail = True # Detail debugging in log (True: DEBUG level, False: INFO level)
 ontime = True # Time check
 onmem = False # Memory check

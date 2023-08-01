@@ -164,6 +164,7 @@ def do_onestep(Tree:'TreeBase', iout:int, fout:int, reftot:float=time.time()):
         print(e); Tree.logger.error(e)
         Tree.logger.error(Tree.summary())
         print("\nIteration is terminated (`do_onestep`)\n"); Tree.logger.error("\nIteration is terminated (`do_onestep`)\n")
+        os.remove(f"{Tree.p.resultdir}/{Tree.p.logprefix}success.tmp")
         sys.exit(1)
     
     return time_record
