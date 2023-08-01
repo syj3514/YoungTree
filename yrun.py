@@ -65,7 +65,7 @@ def do_onestep(Tree:'TreeBase', iout:int, fout:int, reftot:float=time.time()):
             # New log file
             t0 = time.time()
             Tree.mainlog.info(f"[Queue] {iout} start")
-            Tree.logger, _, newlog = make_log(Tree.p.repo, f"{iout:05d}", detail=Tree.p.detail, prefix=Tree.p.logprefix, path_in_repo="YoungTree/log")
+            Tree.logger, _, newlog = make_log(Tree.p.repo, f"{iout:05d}", detail=Tree.p.detail, prefix=Tree.p.logprefix, path_in_repo=f"{Tree.p.path_in_repo}/log")
             Tree.mainlog.info(f"See `{newlog}`\n")
             time_record.append(["Making New Log", time.time()-t0]); t0 = time.time()
             
