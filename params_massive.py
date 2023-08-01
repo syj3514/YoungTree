@@ -81,28 +81,30 @@ mint = 1 # Minimum time for logging (`Done` prints only if t > mint)
 #         if the galaxy is not satisfied, the galaxy is removed from the tree.
 #---------------------------------------------------------------------
 default = False
-# def filtering(gals):
-#     import numpy as np
-#     return np.ones(len(gals), dtype=bool)
+if(default):
+    def filtering(gals):
+        import numpy as np
+        return np.ones(len(gals), dtype=bool)
 
-strict = False
-# Example 1) Mass cut
-def filtering(gals):
-    import numpy as np
-    return gals["m"] > 10**10.5
+else:
+    strict = False
+    # Example 1) Mass cut
+    def filtering(gals):
+        import numpy as np
+        return gals["m"] > 10**10.5
 
-# Example 2) ID list
-# ids = [1, 10, 12, 20]
-# def filtering(gals):
-#     import numpy as np
-#     return np.isin(gals["id"], ids, assume_unique=True)
+    # Example 2) ID list
+    # ids = [1, 10, 12, 20]
+    # def filtering(gals):
+    #     import numpy as np
+    #     return np.isin(gals["id"], ids, assume_unique=True)
 
-# Example 3) Box region
-# def filtering(gals):
-#     import numpy as np
-#     x1, x2 = 0.45, 0.51
-#     y1, y2 = 0.41, 0.45
-#     z1, z2 = 0.46, 0.51
-#     return (gals["x"] > x1) & (gals["x"] < x2) & \
-#            (gals["y"] > y1) & (gals["y"] < y2) & \
-#            (gals["z"] > z1) & (gals["z"] < z2)
+    # Example 3) Box region
+    # def filtering(gals):
+    #     import numpy as np
+    #     x1, x2 = 0.45, 0.51
+    #     y1, y2 = 0.41, 0.45
+    #     z1, z2 = 0.46, 0.51
+    #     return (gals["x"] > x1) & (gals["x"] < x2) & \
+    #            (gals["y"] > y1) & (gals["y"] < y2) & \
+    #            (gals["z"] > z1) & (gals["z"] < z2)
