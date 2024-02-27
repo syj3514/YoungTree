@@ -48,7 +48,7 @@ if __name__=='__main__':
                         for iout in params.nout:
                             if os.path.exists(f"{params.resultdir}/by-product/{params.logprefix}{iout:05d}.pickle"):
                                 if(params.takeover):
-                                    if(iout == np.max(params.nout)):
+                                    if(iout == np.max(params.nout))and(params.takeover)and(not params.default):
                                         mainlog.info("Calculate last pids...")
                                         treebase = pklload(f"{params.resultdir}/{params.logprefix}treebase.temp.pickle")
                                         treebase.load_gals(iout)

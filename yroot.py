@@ -202,6 +202,8 @@ class TreeBase:
         if(iorj!='i')and(iorj!='j'): raise ValueError(f"iorj must be 'i' or 'j'!")
         
         iout = self.outs[iorj]
+        prefix2 = f"[read_leaves]({iout})"
+        self.print(prefix2)
         assert self.leaves[iorj] == {}
         if(iout not in self.accesed)and(not self.p.takeover):
             if(os.path.isdir(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp")):
@@ -212,8 +214,7 @@ class TreeBase:
         if(self.p.strict): gals = gals[self.dict_pure[iout]]
         elif(iout==np.max(self.p.nout)): gals = gals[self.dict_pure[iout]]
         else: pass
-
-        prefix2 = f"[read_leaves]({iout})"
+        
 
         if(os.path.isdir(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp")):
             mask = np.isin(gals['id'], self.avoid_filter[iout], assume_unique=True)
@@ -230,6 +231,7 @@ class TreeBase:
                 partmatch = self.read_part_halo_match(iout)
                 if(not self.p.default)and(self.last_pids is not None):
                     temp = self.last_pids[self.last_pids < len(partmatch)]
+                    self.last_pids = temp
                     temp = gals[np.isin(gals['id'], np.unique(partmatch[temp]), assume_unique=True)]
                     self.print(f"{prefix2} Not default mode: At {iout}, {len(gals)} -> {len(temp)} based on last particles")
                     self.print(temp['id'])
@@ -244,11 +246,13 @@ class TreeBase:
                 if(not self.p.default)and(self.last_pids is not None):
                     partmatch = self.read_part_halo_match(iout)
                     temp = self.last_pids[self.last_pids < len(partmatch)]
+                    self.last_pids = temp
                     temp = gals[np.isin(gals['id'], np.unique(partmatch[temp]), assume_unique=True)]
                     self.print(f"{prefix2} Not default mode: At {iout}, {len(gals)} -> {len(temp)} based on last particles")
                     self.print(temp['id'])
                 else:
                     temp = gals
+                # This may be improved by using multiprocessing
                 for igal in temp:
                     part = uhmi.HaloMaker.read_member_part(snap, igal['id'], galaxy=self.p.galaxy, full_path=self.p.fullpath, usefortran=self.p.usefortran)
                     self.leaves[iorj][igal['id']] = Leaf(self, igal, part.table, snap, backup=None)
@@ -301,9 +305,9 @@ class TreeBase:
                             pklsave(backup, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle", overwrite=True)
                             count += 1
                     self.leaves[iorj][key] = None
+                del backup
             self.print(f"{prefix2} Write `{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp`", level=level)
             self.print(f"{prefix2} {count}/{len(keys)} leaves", level=level)
-            del backup
 
 
     
