@@ -301,9 +301,9 @@ class TreeBase:
                             pklsave(backup, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle", overwrite=True)
                             count += 1
                     self.leaves[iorj][key] = None
+                del backup
             self.print(f"{prefix2} Write `{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp`", level=level)
             self.print(f"{prefix2} {count}/{len(keys)} leaves", level=level)
-            del backup
 
 
     
