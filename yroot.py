@@ -218,14 +218,25 @@ class TreeBase:
 
         if(os.path.isdir(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp")):
             mask = np.isin(gals['id'], self.avoid_filter[iout], assume_unique=True)
-            for igal in gals[mask]:
-                if(os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{igal['id']}.pickle")):
-                    backup = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{igal['id']}.pickle")
-                    self.leaves[iorj][igal['id']] = Leaf(self, igal, None, snap, backup=backup)
-                else:
-                    self.print(f"{prefix2} Add new {iorj}leaf")
-                    part = uhmi.HaloMaker.read_member_part(snap, igal['id'], galaxy=self.p.galaxy, full_path=self.p.fullpath, usefortran=self.p.usefortran)
-                    self.leaves[iorj][igal['id']] = Leaf(self, igal, part.table, snap, backup=None)
+            exists = np.array([os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{igal['id']}.pickle") for igal in gals[mask]])
+            for igal in gals[mask][exists]:
+                backup = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{igal['id']}.pickle")
+                self.leaves[iorj][igal['id']] = Leaf(self, igal, None, snap, backup=backup)
+            parts = uhmi.HaloMaker.read_member_parts(snap, gals[mask][~exists], galaxy=self.p.galaxy, full_path=self.p.fullpath, usefortran=self.p.usefortran, nthread=self.p.ncpu)
+            cursor=0
+            for igal in gals[mask][~exists]:
+                self.print(f"{prefix2} Add new {iorj}leaf")
+                part = parts[cursor : igal['nparts']]
+                self.leaves[iorj][igal['id']] = Leaf(self, igal, part.table, snap, backup=None)
+                cursor += igal['nparts']
+            # for igal in gals[mask]:
+            #     if(os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{igal['id']}.pickle")):
+            #         backup = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{igal['id']}.pickle")
+            #         self.leaves[iorj][igal['id']] = Leaf(self, igal, None, snap, backup=backup)
+            #     else:
+            #         self.print(f"{prefix2} Add new {iorj}leaf")
+            #         part = uhmi.HaloMaker.read_member_part(snap, igal['id'], galaxy=self.p.galaxy, full_path=self.p.fullpath, usefortran=self.p.usefortran)
+            #         self.leaves[iorj][igal['id']] = Leaf(self, igal, part.table, snap, backup=None)
         else:
             if(self.p.loadall):
                 partmatch = self.read_part_halo_match(iout)
@@ -253,9 +264,16 @@ class TreeBase:
                 else:
                     temp = gals
                 # This may be improved by using multiprocessing
+                parts = uhmi.HaloMaker.read_member_parts(snap, temp, galaxy=self.p.galaxy, full_path=self.p.fullpath, usefortran=self.p.usefortran, nthread=self.p.ncpu)
+                cursor=0
                 for igal in temp:
-                    part = uhmi.HaloMaker.read_member_part(snap, igal['id'], galaxy=self.p.galaxy, full_path=self.p.fullpath, usefortran=self.p.usefortran)
+                    part = parts[cursor : igal['nparts']]
                     self.leaves[iorj][igal['id']] = Leaf(self, igal, part.table, snap, backup=None)
+                    cursor += igal['nparts']
+
+                # for igal in temp:
+                #     part = uhmi.HaloMaker.read_member_part(snap, igal['id'], galaxy=self.p.galaxy, full_path=self.p.fullpath, usefortran=self.p.usefortran)
+                #     self.leaves[iorj][igal['id']] = Leaf(self, igal, part.table, snap, backup=None)
                 del part
 
     def load_leaf(self, iorj:str, galid:int, backup:dict=None, prefix="", level='info', verbose=0)->'Leaf':
