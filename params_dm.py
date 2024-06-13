@@ -18,7 +18,7 @@ mode = "y06098" #   Simulation name (should be supported by rur)
 
 galaxy = False # True: galaxy, False: halo
 fullpath=None # Full path to the HaloMaker output directory
-nsnap = 5 # The number of snapshots to be considered when making trees
+nsnap = 4 # The number of snapshots to be considered when making trees
 mcut = 0.01# Number fraction threshold for the prog/desc candidates
 
 
