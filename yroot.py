@@ -226,7 +226,7 @@ class TreeBase:
             cursor=0
             for igal in gals[mask][~exists]:
                 self.print(f"{prefix2} Add new {iorj}leaf")
-                part = parts[cursor : igal['nparts']]
+                part = parts[cursor : cursor+igal['nparts']]
                 self.leaves[iorj][igal['id']] = Leaf(self, igal, part.table, snap, backup=None)
                 cursor += igal['nparts']
             # for igal in gals[mask]:
@@ -267,7 +267,7 @@ class TreeBase:
                 parts = uhmi.HaloMaker.read_member_parts(snap, temp, galaxy=self.p.galaxy, full_path=self.p.fullpath, usefortran=self.p.usefortran, nthread=self.p.ncpu)
                 cursor=0
                 for igal in temp:
-                    part = parts[cursor : igal['nparts']]
+                    part = parts[cursor : cursor+igal['nparts']]
                     self.leaves[iorj][igal['id']] = Leaf(self, igal, part.table, snap, backup=None)
                     cursor += igal['nparts']
 
