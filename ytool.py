@@ -86,20 +86,22 @@ def make_params_dict(fname:str, mode=None) -> None:
     else:
         raise ValueError(f"{mode} is currently not supported!")
     p['rurmode'] = rurmode; p['repo'] = repo; p['dp'] = dp
-    nout = load_nout(p['repo'], galaxy=p['galaxy'])
+    nout = load_nout(p['repo'], galaxy=p['galaxy'], finalout=p['finalout'])
     nstep = load_nstep(nout)
     p['nout'] = nout; p['nstep'] = nstep
 
     p = DotDict(p)
     return p
 
-def load_nout(repo, galaxy=True, path_in_repo=None):
+def load_nout(repo, galaxy=True, path_in_repo=None, finalout=None):
     if path_in_repo is None:
         path_in_repo='galaxy' if galaxy else 'halo'
     path = f"{repo}/{path_in_repo}"
     fnames = os.listdir(path)
     fnames = [file for file in fnames if file.startswith("tree_bricks")]
     nout = np.array([int(file[-5:]) for file in fnames])
+    if finalout is not None:
+        nout = nout[nout<=finalout]
     return np.sort(nout)[::-1]
 
 def load_nstep(nout):

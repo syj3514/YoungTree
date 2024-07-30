@@ -25,11 +25,11 @@ def _debug(func):
         verbose:bool = verblvl <= p.verbose
 
         prefix = kwargs.pop("prefix","")
-        prefix = f"{prefix}[{func.__name__}]"; kwargs["prefix"] = prefix
+        prefix = f"{prefix}[{func.__name__}({verblvl})]"; kwargs["prefix"] = prefix
         level = kwargs.pop("level","debug"); kwargs["level"] = level
 
         if ontime:
-            clock=timer(text=prefix, logger=logger, verbose=verbose, level=level)
+            clock=timer(text=prefix, logger=logger, verbose=verbose, level=level, mint=p.mint)
         if onmem:
             mem = MB()
         if oncpu:
@@ -79,6 +79,8 @@ class TreeBase:
         self.dict_snap = {} # in {iout}, RamsesSnapshot object
         self.dict_gals = {} # in {iout}, galaxy array object
         self.dict_pure = {}
+        self.avoid_filter = {}
+        self.last_pids = None
         self.outs = {'i':None, 'j':None}
         self.leaves = {'i':{}, 'j':{}}
         self.out_on_table = []
@@ -86,6 +88,7 @@ class TreeBase:
         self.part_halo_match = {} # in {iout}, list of int
         self.banned_list = []
         self.out_of_use = []
+        self.accesed = []
         gc.collect()
 
         self.ontime = self.p.ontime
@@ -107,6 +110,7 @@ class TreeBase:
         if not iout in self.dict_snap.keys():
             @_debug
             def _load_snap(self, iout:int, prefix:str="", level='info', verbose=verbose):
+                if(not iout in self.accesed): self.accesed.append(iout)
                 path_in_repo="" if self.p.mode[0] == '/' else "snapshots"
                 snap = uri.RamsesSnapshot(self.p.repo, iout, mode=self.p.rurmode, path_in_repo=path_in_repo)
                 if(self.p.loadall)and(not iout in self.banned_list):
@@ -123,7 +127,7 @@ class TreeBase:
                 del snap.cell_extra, snap.part_extra
                 self.dict_snap[iout] = snap
                 del snap
-            _load_snap(self, iout, prefix=prefix, level=level, verbose=verbose)
+            _load_snap(self, iout, prefix=prefix, level=level, verbose=verbose+1)
         self.memory = GB()
         return self.dict_snap[iout]
 
@@ -140,8 +144,8 @@ class TreeBase:
                     @_debug
                     def __load_gals(self, snap:uri.RamsesSnapshot, galid=None, prefix="", level='debug', verbose=1):
                         gm, gpids = uhmi.HaloMaker.load(snap, galaxy=self.p.galaxy, double_precision=self.p.dp, load_parts=True, full_path=self.p.fullpath)
-                        if(os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout}_partmatch.pkl")):
-                            self.part_halo_match[snap.iout] = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout}_partmatch.pkl")
+                        if(os.path.exists(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout}_partmatch.pkl")):
+                            self.part_halo_match[snap.iout] = pklload(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout}_partmatch.pkl")
                         else:
                             tmp = np.repeat(gm['id'], gm['nparts'])
                             self.part_halo_match[snap.iout] = np.zeros(np.max(gpids), dtype=np.int32)
@@ -152,12 +156,23 @@ class TreeBase:
                     gm = __load_gals(self, snap, galid=galid, prefix=prefix, level='debug', verbose=verbose+1)
                 else:
                     gm = uhmi.HaloMaker.load(snap, galaxy=self.p.galaxy, double_precision=self.p.dp, full_path=self.p.fullpath)
-                if not (self.p.galaxy):
-                    mask = gm['mcontam']/gm['m'] <= self.p.fcontam
-                    self.dict_pure[iout] = mask
+                # if not (self.p.galaxy):
+                # mask = gm['mcontam']/gm['m'] <= self.p.fcontam
+                mask = self.p.filtering(gm)
+                self.dict_pure[iout] = mask
                 self.dict_gals[iout] = gm
+                if(not self.p.default)and(iout == np.max(self.p.nout)):
+                    self.last_pids = large_isind(self.part_halo_match[iout], gm[mask]['id'])
+                    self.print(f"Not default mode: {len(self.last_pids)} particles are selected.", level="info")
                 del snap
             _load_gals(self, iout,galid=galid, prefix=prefix, level=level, verbose=verbose)
+            if(not iout in self.avoid_filter.keys()):
+                if(iout==np.max(self.p.nout))or(not self.p.light):
+                    self.avoid_filter[iout] = self.dict_gals[iout]['id'][self.dict_pure[iout]]
+                else:
+                    self.avoid_filter[iout] = None
+                    if(os.path.exists(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp/keys.pickle")):
+                        self.avoid_filter[iout] = pklload(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp/keys.pickle")
         self.memory = GB()
         # Load
         if isinstance(galid,str):           # 'all'
@@ -175,8 +190,8 @@ class TreeBase:
         if iout in self.part_halo_match.keys():
             if len(self.part_halo_match[iout])>0:
                 return self.part_halo_match[iout]
-            elif os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout}_partmatch.pkl"):
-                return pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout}_partmatch.pkl")
+            elif os.path.exists(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout}_partmatch.pkl"):
+                return pklload(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout}_partmatch.pkl")
             else:
                 raise ValueError(f"Cannot find `part_halo_match` at {iout}!")
         else:
@@ -187,28 +202,89 @@ class TreeBase:
         if(iorj!='i')and(iorj!='j'): raise ValueError(f"iorj must be 'i' or 'j'!")
         
         iout = self.outs[iorj]
+        prefix2 = f"[read_leaves]({iout})"
+        self.print(prefix2)
         assert self.leaves[iorj] == {}
+        if(iout not in self.accesed)and(not self.p.takeover):
+            if(os.path.isdir(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp")):
+                self.mainlog.warning(f"! No takeover ! Remove `{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp`")
+                shutil.rmtree(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp")
         snap = self.load_snap(iout, prefix=prefix)
         gals = self.load_gals(iout, galid='all', prefix=prefix, verbose=verbose+1)
-        if(not self.p.galaxy): gals = gals[self.dict_pure[iout]]
+        if(self.p.strict): gals = gals[self.dict_pure[iout]]
+        elif(iout==np.max(self.p.nout)): gals = gals[self.dict_pure[iout]]
+        else: pass
+        
 
-        if(os.path.isdir(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp")):
-            for igal in gals:
-                backup = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{igal['id']}.pickle")
+        if(os.path.isdir(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp")):
+            mask = np.isin(gals['id'], self.avoid_filter[iout], assume_unique=True)
+            exists = np.array([os.path.exists(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp/{igal['id']}.pickle") for igal in gals[mask]])
+            for igal in gals[mask][exists]:
+                backup = pklload(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp/{igal['id']}.pickle")
                 self.leaves[iorj][igal['id']] = Leaf(self, igal, None, snap, backup=backup)
+            self.print(f"{prefix2} {np.sum(exists)}/{len(gals[mask])} leaves are loaded from dumped", level='info')
+            if(np.sum(~exists)>0):
+                parts = uhmi.HaloMaker.read_member_parts(snap, gals[mask][~exists], galaxy=self.p.galaxy, full_path=self.p.fullpath, usefortran=self.p.usefortran, nthread=self.p.ncpu)
+                cursor=0
+                for igal in gals[mask][~exists]:
+                    self.print(f"{prefix2} Add new {iorj}leaf")
+                    part = parts[cursor : cursor+igal['nparts']]
+                    if(hasattr(part, 'table')):
+                        part = part.table
+                    self.leaves[iorj][igal['id']] = Leaf(self, igal, part, snap, backup=None)
+                    cursor += igal['nparts']
+                snap.clear()
+                self.print(f"{prefix2} {np.sum(~exists)}/{len(gals[mask])} leaves are newly loaded", level='info')
+            # for igal in gals[mask]:
+            #     if(os.path.exists(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp/{igal['id']}.pickle")):
+            #         backup = pklload(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp/{igal['id']}.pickle")
+            #         self.leaves[iorj][igal['id']] = Leaf(self, igal, None, snap, backup=backup)
+            #     else:
+            #         self.print(f"{prefix2} Add new {iorj}leaf")
+            #         part = uhmi.HaloMaker.read_member_part(snap, igal['id'], galaxy=self.p.galaxy, full_path=self.p.fullpath, usefortran=self.p.usefortran)
+            #         self.leaves[iorj][igal['id']] = Leaf(self, igal, part.table, snap, backup=None)
         else:
             if(self.p.loadall):
                 partmatch = self.read_part_halo_match(iout)
-                for igal in gals:
+                if(not self.p.default)and(self.last_pids is not None):
+                    temp = self.last_pids[self.last_pids < len(partmatch)]
+                    self.last_pids = temp
+                    temp = gals[np.isin(gals['id'], np.unique(partmatch[temp]), assume_unique=True)]
+                    self.print(f"{prefix2} Not default mode: At {iout}, {len(gals)} -> {len(temp)} based on last particles")
+                    self.print(temp['id'])
+                else:
+                    temp = gals
+                for igal in temp:
                     self.leaves[iorj][igal['id']] = Leaf(self, igal, snap.part.table[np.where(partmatch == igal['id'])[0]], snap, backup=None)
+                self.print(f"{prefix2} {len(temp)}/{len(temp)} leaves are newly loaded", level='info')
                 snap.clear()
                 del partmatch, gals
                 self.banned_list.append(iout)
             else:
-                for igal in gals:
-                    part = uhmi.HaloMaker.read_member_part(snap, igal['id'], galaxy=self.p.galaxy, full_path=self.p.fullpath, usefortran=self.p.usefortran)
-                    self.leaves[iorj][igal['id']] = Leaf(self, igal, part.table, snap, backup=None)
+                if(not self.p.default)and(self.last_pids is not None):
+                    partmatch = self.read_part_halo_match(iout)
+                    temp = self.last_pids[self.last_pids < len(partmatch)]
+                    self.last_pids = temp
+                    temp = gals[np.isin(gals['id'], np.unique(partmatch[temp]), assume_unique=True)]
+                    self.print(f"{prefix2} Not default mode: At {iout}, {len(gals)} -> {len(temp)} based on last particles")
+                    self.print(temp['id'])
+                else:
+                    temp = gals
+                # This may be improved by using multiprocessing
+                parts = uhmi.HaloMaker.read_member_parts(snap, temp, galaxy=self.p.galaxy, full_path=self.p.fullpath, usefortran=self.p.usefortran, nthread=self.p.ncpu)
+                cursor=0
+                for igal in temp:
+                    part = parts[cursor : cursor+igal['nparts']]
+                    if(hasattr(part, 'table')):
+                        part = part.table
+                    self.leaves[iorj][igal['id']] = Leaf(self, igal, part, snap, backup=None)
+                    cursor += igal['nparts']
+                self.print(f"{prefix2} {len(temp)}/{len(temp)} leaves are newly loaded", level='info')
+                # for igal in temp:
+                #     part = uhmi.HaloMaker.read_member_part(snap, igal['id'], galaxy=self.p.galaxy, full_path=self.p.fullpath, usefortran=self.p.usefortran)
+                #     self.leaves[iorj][igal['id']] = Leaf(self, igal, part.table, snap, backup=None)
                 del part
+                snap.clear()
 
     def load_leaf(self, iorj:str, galid:int, backup:dict=None, prefix="", level='info', verbose=0)->'Leaf':
         if(iorj!='i')and(iorj!='j'): raise ValueError(f"iorj must be 'i' or 'j'!")
@@ -216,7 +292,7 @@ class TreeBase:
         if(self.leaves[iorj] == {}):
             self.read_leaves[iorj](prefix=prefix, level=level, verbose=verbose+1)
         if(self.leaves[iorj][galid] is None):
-            backup = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{galid}.pickle")
+            backup = pklload(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp/{galid}.pickle")
             self.leaves[iorj][galid] = Leaf(self, None, None, None, backup=backup)
         return self.leaves[iorj][galid]
 
@@ -226,31 +302,51 @@ class TreeBase:
         iout = self.outs[iorj]
         if(iout in self.out_of_use): return
         if(not iout in self.out_on_table): self.out_on_table.append(iout)
-        if( not os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}.pickle") ):
+        if( not os.path.exists(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}.pickle") ):
             prefix2 = f"[write_leaves]({iout})"
 
             keys = list(self.leaves[iorj].keys())
-            if( not os.path.isdir(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp") ):
-                os.mkdir(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp")
-            if( not os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/keys.pickle") ):
-                pklsave(keys, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/keys.pickle", overwrite=True)
-            backup = {}
-            count = 0
-            for key in keys:
-                if( self.leaves[iorj][key] is None ): # Dumped
-                    continue
-                leaf = self.load_leaf(iorj, key, prefix=prefix, level=level, verbose=verbose+1)
-                if( leaf.changed ):
-                    backup = {}
-                    if( os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle") ):
-                        backup = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle")
-                    backup = leaf.selfsave(backup=backup)
-                    pklsave(backup, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle", overwrite=True)
-                    count += 1
-                self.leaves[iorj][key] = None
-            self.print(f"{prefix2} Write `{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp`", level=level)
-            self.print(f"{prefix2} {count}/{len(keys)} leaves", level=level)
-            del backup
+            savecount = 0
+            dumpcount = 0
+            unchanged = 0
+            nfiltered = 0
+            if( not os.path.isdir(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp") ):
+                os.mkdir(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp")
+            if(len(keys)>0):
+                if( not os.path.exists(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp/keys.pickle") ):
+                    temp = [key for key in keys if(key in self.avoid_filter[iout])]
+                    pklsave(temp, f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp/keys.pickle", overwrite=True)
+                else:
+                    temp1 = pklload(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp/keys.pickle"); temp1.sort()
+                    temp2 = [key for key in keys if(key in self.avoid_filter[iout])]; temp2.sort()
+                    if( temp1 != temp2 ):
+                        self.print(f"{prefix2} Update keys: \n{temp1} \n-> \n{temp2}")
+                        pklsave(temp2, f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp/keys.pickle", overwrite=True)
+                backup = {}
+                for key in keys:
+                    if( self.leaves[iorj][key] is None ): # Dumped
+                        dumpcount += 1
+                        continue
+                    if(key in self.avoid_filter[iout]):
+                        leaf = self.load_leaf(iorj, key, prefix=prefix, level=level, verbose=verbose+1)
+                        if( leaf.changed ):
+                            backup = {}
+                            if( os.path.exists(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp/{key}.pickle") ):
+                                backup = pklload(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp/{key}.pickle")
+                            backup = leaf.selfsave(backup=backup)
+                            pklsave(backup, f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp/{key}.pickle", overwrite=True)
+                            savecount += 1
+                        else:
+                            unchanged += 1
+                    else:
+                        nfiltered += 1
+                    self.leaves[iorj][key] = None
+                del backup
+            self.print(f"{prefix2} Write `{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp`", level=level)
+            self.print(f"{prefix2} {savecount}/{len(keys)} leaves", level=level)
+            self.print(f"{prefix2}     {dumpcount}: alread dumped", level=level)
+            self.print(f"{prefix2}     {unchanged}: nothing changed", level=level)
+            self.print(f"{prefix2}     {nfiltered}: filtered from params", level=level)
 
 
     
@@ -279,8 +375,8 @@ class TreeBase:
         for jout in keys:
             if(jout in self.out_of_use):
                 del self.part_halo_match[jout]
-                if os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{jout}_partmatch.pkl"):
-                    os.remove(f"{self.p.resultdir}/by-product/{self.p.logprefix}{jout}_partmatch.pkl")
+                if os.path.exists(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{jout}_partmatch.pkl"):
+                    os.remove(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{jout}_partmatch.pkl")
                     self.print(f"[flush #1] dumped partmatch at {jout} is removed", level='info')
                 self.print(f"[flush #1] part_halo_match at {jout} is released", level='info')
         keys = list(self.dict_pure)
@@ -290,8 +386,8 @@ class TreeBase:
                 self.print(f"[flush #1] dict_pure at {jout} is released", level='info')
         
         for jout in self.out_of_use:
-            if(os.path.isdir(f"{self.p.resultdir}/by-product/{self.p.logprefix}{jout:05d}_temp")):
-                shutil.rmtree(f"{self.p.resultdir}/by-product/{self.p.logprefix}{jout:05d}_temp")
+            if(os.path.isdir(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{jout:05d}_temp")):
+                shutil.rmtree(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{jout:05d}_temp")
                 self.print(f"[flush #1] leaves at {jout} are removed", level='info')
             if(self.outs['i']==jout): self.leaves['i'] = {}
             if(self.outs['j']==jout): self.leaves['j'] = {}
@@ -305,8 +401,8 @@ class TreeBase:
             if(iout in self.part_halo_match.keys()):
                 partmatch = self.part_halo_match[iout]
                 if len(partmatch)>0:
-                    if not os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout}_partmatch.pkl"):
-                        pklsave(partmatch, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout}_partmatch.pkl")
+                    if not os.path.exists(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout}_partmatch.pkl"):
+                        pklsave(partmatch, f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout}_partmatch.pkl")
                         self.print(f"[flush #2] partmatch at {iout} is dumped", level='info')
                     else:
                         self.print(f"[flush #2] partmatch at {iout} is released", level='info')
@@ -316,13 +412,13 @@ class TreeBase:
                 keys = list(self.leaves['i'].keys())
                 for key in keys:
                     leaf:Leaf = self.leaves['i'][key]
-                    if(not os.path.isdir(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp")):
-                        os.mkdir(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp")
+                    if(not os.path.isdir(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp")):
+                        os.mkdir(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp")
                     temp={}
-                    if(os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle")):
-                        temp = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle")
+                    if(os.path.exists(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp/{key}.pickle")):
+                        temp = pklload(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp/{key}.pickle")
                     backup = leaf.selfsave(backup=temp)
-                    pklsave(backup, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle", overwrite=True)
+                    pklsave(backup, f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp/{key}.pickle", overwrite=True)
                     self.print(f"[flush #2] iLeaf{key} at {iout} is dumped", level='info')
                     self.leaves['i'][key] = None
                 del leaf, backup, temp
@@ -330,13 +426,13 @@ class TreeBase:
                 keys = list(self.leaves['j'].keys())
                 for key in keys:
                     leaf:Leaf = self.leaves['j'][key]
-                    if(not os.path.isdir(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp")):
-                        os.mkdir(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp")
+                    if(not os.path.isdir(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp")):
+                        os.mkdir(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp")
                     temp={}
-                    if(os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle")):
-                        temp = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle")
+                    if(os.path.exists(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp/{key}.pickle")):
+                        temp = pklload(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp/{key}.pickle")
                     backup = leaf.selfsave(backup=temp)
-                    pklsave(backup, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle", overwrite=True)
+                    pklsave(backup, f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp/{key}.pickle", overwrite=True)
                     self.print(f"[flush #2] jLeaf{key} at {iout} is dumped", level='info')
                     self.leaves['j'][key] = None
                 del leaf, backup, temp
@@ -366,7 +462,8 @@ class TreeBase:
         for idkey in idkeys:
             ileaf = self.leaves['i'][idkey]
             if(ileaf is not None):
-                val += ileaf.size()
+                if(not ileaf.contam):
+                    val += ileaf.size()
             else:
                 ndump += 1
         temp.append(f"\t[i]{self.outs['i']}: {len(idkeys)-ndump} leaves ({ndump} dumped) {val / 2**20:.2f} MB\n")
@@ -376,7 +473,8 @@ class TreeBase:
         for idkey in idkeys:
             ileaf = self.leaves['j'][idkey]
             if(ileaf is not None):
-                val += ileaf.size()
+                if(not ileaf.contam):
+                    val += ileaf.size()
             else:
                 ndump += 1
         temp.append(f"\t[j]{self.outs['j']}: {len(idkeys)-ndump} leaves ({ndump} dumped) {val / 2**20:.2f} MB\n")
@@ -389,7 +487,7 @@ class TreeBase:
             if(leng>0):
                 temp.append(f"\t{key}: {leng} matched parts ({self.part_halo_match[key].nbytes / 2**20:.2f} MB)\n")
             else:
-                if(os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{key}_partmatch.pkl")):
+                if(os.path.exists(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{key}_partmatch.pkl")):
                     temp.append(f"\t{key}: matched parts are dumped\n")
                 else:
                     temp.append(f"\t{key}: no matched parts\n")
@@ -423,101 +521,9 @@ class TreeBase:
             ileaf = self.load_leaf(iorj, ikey)
             ileaf.logger = self.logger
 
-    # def _find_cands_mp(self, arg):
-    #     ikey, jkeys, jhalos_mem, mcut, prefix = arg
-    def _find_cands_mp(self, ikey, jkeys, jhalos_mem, mcut, prefix):
-        c_proc = mp.current_process()
-        ileaf:Leaf = self.load_leaf('i', ikey, prefix=prefix, level='debug')
-        # Calc, or not?
-        calc = True
-        if(self.outs['j']>self.outs['i']):
-            if(ileaf.desc is not None):
-                if(self.outs['j'] in ileaf.desc[:,0]): calc=False
-        if(self.outs['j']<self.outs['i']):
-            if(ileaf.prog is not None):
-                if(self.outs['j'] in ileaf.prog[:,0]): calc=False
-        # Main calculation
-        if calc:
-            if jhalos_mem is None:
-                jhalos_mem = self.read_part_halo_match(self.outs['j'])
-            pid = ileaf.pid
-            pid = pid[pid <= len(jhalos_mem)]
-            hosts = jhalos_mem[pid-1]
-            hosts = hosts[hosts>0]
-            hosts, count = np.unique(hosts, return_counts=True) # CPU?
-            hosts = hosts[count/len(pid) > mcut]
-            hosts = hosts[ np.isin(hosts, jkeys, assume_unique=True) ]
-            # hosts = hosts[ large_isin(hosts, jkeys) ]
-            if len(hosts)>0:
-                otherleaves = [self.load_leaf('j', iid, prefix=prefix, level='debug') for iid in hosts]
-                ids, scores = ileaf.calc_score(self.outs['j'], otherleaves, prefix=f"<{ileaf._name}>",level='debug') # CPU?
-            else:
-                ids = np.array([[self.outs['j'], 0]])
-                scores = np.array([[-10, -10, -10, -10, -10]])
-        
-        # No need to calculation
-        else:
-            if self.outs['j']<self.outs['i']:
-                arg = ileaf.prog[:,0]==self.outs['j']
-                ids = ileaf.prog[arg]
-                scores = ileaf.prog_score[arg]
-            elif self.outs['j']>self.outs['i']:
-                arg = ileaf.desc[:,0]==self.outs['j']
-                ids = ileaf.desc[arg]
-                scores = ileaf.desc_score[arg]
-            else:
-                raise ValueError(f"Same output {self.outs['i']} and {self.outs['j']}!")        
-        return ikey, calc, ids, scores
 
     @_debug
-    def find_cands_mp(self, mcut=0.01, prefix="", level='debug', verbose=0):
-        ikeys = list(self.leaves['i'].keys())
-        jkeys = np.array(list(self.leaves['j'].keys()))
-        jhalos_mem = self.read_part_halo_match(self.outs['j'])
-        if(self.outs['j'] in self.part_halo_match.keys()):
-            if len(self.part_halo_match[self.outs['j']])>0:
-                jhalos_mem = None
-
-        # Multiprocessing
-        with Pool(processes=self.p.ncpu) as pool:
-            print(f"{cpu_count()} CPUs are available!")
-            print("Pool start!")
-            results = pool.starmap_async(self._find_cands_mp, [(ikey, jkeys, jhalos_mem, mcut, prefix) for ikey in ikeys], chunksize=self.p.ncpu)
-            print("wait!")
-            results.wait()
-            print("get!")
-            results = results.get()
-            print("Pool Done!")
-
-        
-        for ikey, calc, ids, scores in results:
-            ileaf:Leaf = self.load_leaf('i', ikey, prefix=prefix, level=level, verbose=verbose+1)
-            if(calc):
-                if self.outs['j']<self.outs['i']:
-                    ileaf.prog = ids if ileaf.prog is None else np.vstack((ileaf.prog, ids))
-                    ileaf.prog_score = scores if ileaf.prog_score is None else np.vstack((ileaf.prog_score, scores))
-                    ileaf.changed = True
-                elif self.outs['j']>self.outs['i']:
-                    ileaf.desc = ids if ileaf.desc is None else np.vstack((ileaf.desc, ids))
-                    ileaf.desc_score = scores if ileaf.desc_score is None else np.vstack((ileaf.desc_score, scores))
-                    ileaf.changed = True
-                else:
-                    raise ValueError(f"Same output {self.outs['i']} and {self.outs['j']}!")
-            # Debugging message
-            msg = f"{prefix}<{ileaf.name()}> has {len(ids)} candidates"
-            if len(ids)>0:
-                if np.sum(scores[0])>0:
-                    if len(ids) < 6:
-                        msg = f"{msg} {[f'{ids[i][-1]}({scores[i][0]:.3f})' for i in range(len(ids))]}"
-                    else:
-                        msg = f"{msg} {[f'{ids[i][-1]}({scores[i][0]:.3f})' for i in range(5)]+['...']}"
-                else:
-                    msg = f"{prefix}<{ileaf.name()}> has {len(ids)-1} candidates"
-            if(verbose <= self.p.verbose):self.print(msg, level='debug')
-
-
-    @_debug
-    def find_cands(self, mcut=0.01, prefix="", level='debug', verbose=0):
+    def find_cands(self, prefix="", level='debug', verbose=0):
         """
         Finds candidates based on certain conditions and performs calculations.
         1) It starts by retrieving the keys from the 'i' and 'j' dictionaries stored in the leaves attribute.
@@ -528,7 +534,6 @@ class TreeBase:
         6) It generates a debugging message based on the number of candidates and prints it if the verbosity level allows.
 
         Parameters:
-            `mcut` (float): Threshold value for candidate selection (default=0.01).
             `prefix` (str): Prefix for debugging message (default="").
             `level` (str): Debug level (default='debug').
             `verbose` (int): Verbosity level (default=0).
@@ -538,6 +543,7 @@ class TreeBase:
         """
         ikeys = list(self.leaves['i'].keys())
         jkeys = list(self.leaves['j'].keys())
+        self.print(f"{prefix} {self.outs['i']} <-> {self.outs['j']}", level='info')
         jhalos_mem = None
         for key in ikeys:
             ileaf:Leaf = self.load_leaf('i', key, prefix=prefix, level=level, verbose=verbose+1)
@@ -559,11 +565,15 @@ class TreeBase:
                 hosts = jhalos_mem[pid-1]
                 hosts = hosts[hosts>0]
                 hosts, count = np.unique(hosts, return_counts=True) # CPU?
-                hosts = hosts[count/len(pid) > mcut]
+                hosts = hosts[count/len(pid) > self.p.mcut]
                 hosts = hosts[ np.isin(hosts, jkeys, assume_unique=True) ] # Short, so no need to use large_isin
                 if len(hosts)>0:
                     otherleaves = [self.load_leaf('j', iid, prefix=prefix, level=level, verbose=verbose+1) for iid in hosts]
+                    otherleaves = [ileaf for ileaf in otherleaves if(not ileaf.contam)]
+                    # Change above
+                    # If contam, remake that leaf
                     ids, scores = ileaf.calc_score(self.outs['j'], otherleaves, prefix=f"<{ileaf._name}>",level='debug', verbose=verbose+1) # CPU?
+                    self.avoid_filter[self.outs['j']] = ids.flatten() if(self.avoid_filter[self.outs['j']] is None) else np.union1d(self.avoid_filter[self.outs['j']], ids.flatten())
                 else:
                     ids = np.array([[self.outs['j'], 0]])
                     scores = np.array([[-10, -10, -10, -10, -10]])
@@ -583,10 +593,12 @@ class TreeBase:
                 if self.outs['j']<self.outs['i']:
                     arg = ileaf.prog[:,0]==self.outs['j']
                     ids = ileaf.prog[arg]
+                    if(self.avoid_filter[self.outs['j']] is None): self.avoid_filter[self.outs['j']] = ids.flatten()
                     scores = ileaf.prog_score[arg]
                 elif self.outs['j']>self.outs['i']:
                     arg = ileaf.desc[:,0]==self.outs['j']
                     ids = ileaf.desc[arg]
+                    if(self.avoid_filter[self.outs['j']] is None): self.avoid_filter[self.outs['j']] = ids.flatten()
                     scores = ileaf.desc_score[arg]
                 else:
                     raise ValueError(f"Same output {self.outs['i']} and {self.outs['j']}!")
@@ -602,6 +614,7 @@ class TreeBase:
                 else:
                     msg = f"{prefix}<{ileaf.name()}> has {len(ids)-1} candidates"
             if(verbose <= self.p.verbose):self.print(msg, level='debug')
+        if(not self.p.default): self.print(f"Pass filtered at {self.outs['j']}: ({len(self.avoid_filter[self.outs['j']])}){self.avoid_filter[self.outs['j']]}")
 
     @_debug
     def finalize(self, iout:int, prefix="", level='info', verbose=0):
@@ -625,21 +638,21 @@ class TreeBase:
             If the temporary backup file directory is not found.
         """
         prefix2 = f"[Reduce Backup file] ({iout})"
-        if(os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}.pickle")):
+        if(os.path.exists(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}.pickle")):
             return
-        if not os.path.exists(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp"):
-            raise FileNotFoundError(f"`{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp` is not found!")
-        keys = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/keys.pickle")
+        if not os.path.exists(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp"):
+            raise FileNotFoundError(f"`{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp` is not found!")
+        keys = pklload(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp/keys.pickle")
         count = 0
         for key in keys:
-            gal = pklload(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp/{key}.pickle")['gal']
+            gal = pklload(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp/{key}.pickle")['gal']
             gals = gal if count==0 else np.hstack((gals, gal))
             count += 1
-        pklsave(gals, f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}.pickle", overwrite=True)
-        self.print(f"{prefix2} Save `{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}.pickle`", level=level)
+        pklsave(gals, f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}.pickle", overwrite=True)
+        self.print(f"{prefix2} Save `{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}.pickle`", level=level)
         self.out_of_use.append(iout)
-        shutil.rmtree(f"{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp")
-        self.print(f"{prefix2} Remove `{self.p.resultdir}/by-product/{self.p.logprefix}{iout:05d}_temp`", level=level)
+        shutil.rmtree(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp")
+        self.print(f"{prefix2} Remove `{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp`", level=level)
         del gals
 
 
@@ -661,11 +674,11 @@ def _debug_leaf(func):
         verbose = verblvl <= p.verbose
 
         prefix = kwargs.pop("prefix","")
-        prefix = f"{prefix}[{func.__name__}]"; kwargs["prefix"]=prefix
+        prefix = f"{prefix}[{func.__name__}({verblvl})]"; kwargs["prefix"]=prefix
         level = kwargs.pop("level","debug"); kwargs["level"]=level
 
         if ontime:
-            clock=timer(text=prefix, logger=logger, verbose=verbose, level=level)
+            clock=timer(text=prefix, logger=logger, verbose=verbose, level=level, mint=Tree.p.mint)
         if onmem:
             mem = MB()
         if oncpu:
@@ -708,12 +721,15 @@ class Leaf:
         self.logger = base.logger
         self.contam = False
         try:
-            if self.cat['mcontam']/self.cat['m'] > self.base.p.fcontam:
+            if(self.base.p.strict)and(not self.base.p.filtering(self.cat)):
+            # if self.cat['mcontam']/self.cat['m'] > self.base.p.fcontam:
                 self.contam = True
-            self._name = f"L{self.id} at {self.iout} ({int(100*self.cat['mcontam']/self.cat['m'])}%)"
+            if(not self.base.p.galaxy):
+                self._name = f"L{self.id} at {self.iout} ({int(100*self.cat['mcontam']/self.cat['m'])}%)"
         except:
             pass
-        
+        if(self.base.avoid_filter[self.iout] is not None):
+            if(self.id in self.base.avoid_filter[self.iout]): self.contam=False
         # Mem part
         if not self.contam:
             if(backup is not None):
@@ -861,7 +877,7 @@ class Leaf:
             return ids[arg][::-1], scores[arg][::-1]
 
     @_debug_leaf
-    def _calc_matchrate(self:'Leaf', otherleaf:'Leaf', prefix="", level='debug', verbose=0) -> float:
+    def _calc_matchrate(self:'Leaf', otherleaf:'Leaf', prefix="", level='debug', verbose=5) -> float:
         large=False
         ilen = len(self.pid); jlen = len(otherleaf.pid)
         if(ilen >= 1e6)or(jlen >= 1e6):
@@ -897,7 +913,7 @@ class Leaf:
         val, ind = self._calc_matchrate(otherleaf, prefix=prefix, level=level, verbose=verbose)
         return val, ind
 
-    @_debug_leaf
+    # @_debug_leaf
     def calc_bulkmotion(self, checkind:list[bool]=None, prefix="", level='debug', verbose=0):
         if checkind is None:
             checkind = np.full(self.nparts, True)
@@ -911,7 +927,7 @@ class Leaf:
         return np.array([vx, vy, vz])
 
     @_debug_leaf
-    def _calc_veloffset(self:'Leaf', otherleaf:'Leaf', selfind:list[bool]=None, otherind:list[bool]=None, prefix="", level='debug', verbose=0) -> float:
+    def _calc_veloffset(self:'Leaf', otherleaf:'Leaf', selfind:list[bool]=None, otherind:list[bool]=None, prefix="", level='debug', verbose=5) -> float:
         if selfind is None:
             val, selfind = self.calc_matchrate(otherleaf, prefix=prefix, verbose=verbose+1)
         if otherind is None:

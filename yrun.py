@@ -43,6 +43,7 @@ def do_onestep(Tree:'TreeBase', iout:int, fout:int, reftot:float=time.time()):
     nstep = Tree.p.nstep
     resultdir = Tree.p.resultdir
     set_num_threads(Tree.p.ncpu)
+    time_record = []
     try:
         ref = time.time()
         skip = False
@@ -50,25 +51,34 @@ def do_onestep(Tree:'TreeBase', iout:int, fout:int, reftot:float=time.time()):
         logname = Tree.mainlog.name
         Tree.mainlog = follow_log(logname, detail=Tree.p.detail)
         # Fully saved
-        if os.path.exists(f"{resultdir}/by-product/{Tree.p.logprefix}{iout:05d}.pickle"):
-            Tree.mainlog.info(f"[Queue] {iout} is done --> Skip\n")
-            skip=True
+        if os.path.exists(f"{resultdir}/by-product/{Tree.p.fileprefix}{iout:05d}.pickle"):
+            if(not Tree.p.takeover):
+                Tree.mainlog.warning(f"! No takeover ! Remove `{resultdir}/by-product/{Tree.p.fileprefix}{iout:05d}.pickle`")
+                os.remove(f"{resultdir}/by-product/{Tree.p.fileprefix}{iout:05d}.pickle")
+            else:
+                Tree.mainlog.info(f"[Queue] {iout} is done --> Skip\n")
+                skip=True
         
     
         # Main process
         if not skip:
             # New log file
+            t0 = time.time()
             Tree.mainlog.info(f"[Queue] {iout} start")
-            Tree.logger, _, newlog = make_log(Tree.p.repo, f"{iout:05d}", detail=Tree.p.detail, prefix=Tree.p.logprefix, path_in_repo="YoungTree/log")
+            Tree.logger, _, newlog = make_log(Tree.p.repo, f"{iout:05d}", detail=Tree.p.detail, prefix=Tree.p.logprefix, path_in_repo=f"{Tree.p.path_in_repo}/log")
             Tree.mainlog.info(f"See `{newlog}`\n")
+            time_record.append(["Making New Log", time.time()-t0]); t0 = time.time()
             
             # Load snap gal part
             Tree.logger.info(f"\n\nStart at iout={iout}\n")
             if(Tree.leaves['i']!={}):
+                Tree.logger.info(f"[slot i] {Tree.outs['i']} -> {iout}")
                 Tree.write_leaves('i', level='info')
-                Tree.leaves['i']={} # Is this best??? (Summary error)
+                Tree.leaves['i']={}
+                time_record.append([f"Write leaves at {Tree.outs['i']}", time.time()-t0]); t0 = time.time()
             Tree.outs['i'] = iout
             Tree.read_leaves('i', level='info')
+            time_record.append([f"Read leaves at {Tree.outs['i']}", time.time()-t0]); t0 = time.time()
             Tree.update_debugger('i')
             Tree.logger.info(f"\n{Tree.summary()}\n")
             Tree.logger.info("\n----------------\nFind progenitors\n----------------\n")
@@ -80,16 +90,21 @@ def do_onestep(Tree:'TreeBase', iout:int, fout:int, reftot:float=time.time()):
                     jout = Tree.step2out(jstep)
                     Tree.logger.info(f"\n\nProgenitor at jout={jout}\n")
                     if(Tree.leaves['j']!={}):
+                        Tree.logger.info(f"[slot j] {Tree.outs['j']} -> {jout}")
                         Tree.write_leaves('j', level='info')
                         Tree.leaves['j']={}
+                        time_record.append([f"Write leaves at {Tree.outs['j']}", time.time()-t0]); t0 = time.time()
                     Tree.outs['j'] = jout
                     Tree.read_leaves('j', level='info')
+                    time_record.append([f"Read leaves at {Tree.outs['j']}", time.time()-t0]); t0 = time.time()
                     Tree.update_debugger('j')
                     Tree.logger.info(f"\n{Tree.summary()}\n")
                     Tree.logger.info("\n")
                     Tree.find_cands(level='info')
+                    time_record.append([f"Find candidates {Tree.outs['i']}<->{Tree.outs['j']}", time.time()-t0]); t0 = time.time()
                     Tree.flush(jout, level='info')
             Tree.write_leaves('j', level='info')
+            time_record.append([f"Write leaves at {Tree.outs['j']}", time.time()-t0]); t0 = time.time()
             Tree.leaves['j']={}
             
             Tree.logger.info("\n----------------\nFind descendants\n----------------\n")
@@ -100,17 +115,23 @@ def do_onestep(Tree:'TreeBase', iout:int, fout:int, reftot:float=time.time()):
                     jout = Tree.step2out(jstep)
                     Tree.logger.info(f"\n\nDescendant at jout={jout}\n")
                     if(Tree.leaves['j']!={}):
+                        Tree.logger.info(f"[slot j] {Tree.outs['j']} -> {jout}")
                         Tree.write_leaves('j', level='info')
                         Tree.leaves['j']={}
+                        time_record.append([f"Write leaves at {Tree.outs['j']}", time.time()-t0]); t0 = time.time()
                     Tree.outs['j'] = jout
                     Tree.read_leaves('j', level='info')
+                    time_record.append([f"Read leaves at {Tree.outs['j']}", time.time()-t0]); t0 = time.time()
                     Tree.update_debugger('j')
                     Tree.logger.info(f"\n{Tree.summary()}\n")
                     Tree.logger.info("\n")
                     Tree.find_cands(level='info')
+                    time_record.append([f"Find candidates {Tree.outs['i']}<->{Tree.outs['j']}", time.time()-t0]); t0 = time.time()
                     Tree.flush(jout, level='info')
             Tree.logger.info("\n----------------\nFlush Redundants\n----------------\n")
+            Tree.logger.info(f"[slot j] Dump {Tree.outs['j']}")
             Tree.write_leaves('j', level='info')
+            time_record.append([f"Write leaves at {Tree.outs['j']}", time.time()-t0]); t0 = time.time()
             Tree.leaves['j']={}
             
             # Flush redundant snapshots
@@ -120,26 +141,33 @@ def do_onestep(Tree:'TreeBase', iout:int, fout:int, reftot:float=time.time()):
                 outs = Tree.out_on_table
                 for out in outs:
                     if out > cutout:
-                        if(os.path.exists(f"{resultdir}/by-product/{Tree.p.logprefix}{out:05d}.pickle")):
+                        if(os.path.exists(f"{resultdir}/by-product/{Tree.p.fileprefix}{out:05d}.pickle")):
                             Tree.out_of_use.append(out)
                         else:
                             Tree.finalize(out, level='info')
+                            time_record.append([f"Finalize {out}", time.time()-t0]); t0 = time.time()
                         Tree.out_on_table.remove(out)
                         Tree.flush(out, level='info')        
                         Tree.logger.info(f"\n{Tree.summary()}\n")
             Tree.logger.info("\n----------------\nBackup leaf files\n----------------\n")
             # Backup files
+            Tree.logger.info(f"[slot i] Dump {Tree.outs['i']}")
             Tree.write_leaves('i', level='info')
             Tree.leaves['i']={}
+            time_record.append([f"Write leaves at {Tree.outs['i']}", time.time()-t0]); t0 = time.time()
             Tree.logger.info(f"\n{Tree.summary()}\n")
             treerecord(iout, nout[nout<=fout], time.time()-ref, time.time()-reftot, Tree.mainlog)
     except Exception as e:
-        print(); Tree.logger.error("")
+        print("\n\n"); Tree.logger.error("\n\n")
         print(traceback.format_exc()); Tree.logger.error(traceback.format_exc())
+        print("\n\n"); Tree.logger.error("\n\n")
         print(e); Tree.logger.error(e)
         Tree.logger.error(Tree.summary())
         print("\nIteration is terminated (`do_onestep`)\n"); Tree.logger.error("\nIteration is terminated (`do_onestep`)\n")
+        os.remove(f"{Tree.p.resultdir}/{Tree.p.logprefix}success.tmp")
         sys.exit(1)
+    
+    return time_record
         
 
 
@@ -152,14 +180,14 @@ def do_onestep(Tree:'TreeBase', iout:int, fout:int, reftot:float=time.time()):
 # @debugf(ontime=True, onmem=True, oncpu=True)
 def gather(p:DotDict, logger:logging.Logger):
     go=True
-    if os.path.exists(f"{p.resultdir}/{p.logprefix}all.pickle"):
-        ans=input(f"You already have `{p.resultdir}/{p.logprefix}all.pickle`. Ovewrite? [Y/N]")
+    if os.path.exists(f"{p.resultdir}/{p.fileprefix}all.pickle"):
+        ans=input(f"You already have `{p.resultdir}/{p.fileprefix}all.pickle`. Ovewrite? [Y/N]")
         go = ans in yess
     if go:
         logger.info("Gather all files...")
         print("Gather all files...")
         for i, iout in enumerate(p.nout):
-            brick = pklload(f"{p.resultdir}/by-product/{p.logprefix}{iout:05d}.pickle")
+            brick = pklload(f"{p.resultdir}/by-product/{p.fileprefix}{iout:05d}.pickle")
             if(not 'host' in brick.dtype.names):
                 field_names = brick.dtype.names
                 dtypes = brick.dtype.descr
@@ -199,22 +227,22 @@ def gather(p:DotDict, logger:logging.Logger):
                 descscore = gal['desc_score'][:,0]
                 gal['desc'] = desc[arg].astype(np.int32)
                 gal['desc_score'] = descscore[arg].astype(np.float64)
-        pklsave(gals, f"{p.resultdir}/{p.logprefix}all.pickle", overwrite=True)
-        logger.info(f"`{p.resultdir}/{p.logprefix}all.pickle` saved\n")
-        print(f"`{p.resultdir}/{p.logprefix}all.pickle` saved\n")
-    # gals = pklload(f"{p.resultdir}/{p.logprefix}all.pickle")
+        pklsave(gals, f"{p.resultdir}/{p.fileprefix}all.pickle", overwrite=True)
+        logger.info(f"`{p.resultdir}/{p.fileprefix}all.pickle` saved\n")
+        print(f"`{p.resultdir}/{p.fileprefix}all.pickle` saved\n")
+    # gals = pklload(f"{p.resultdir}/{p.fileprefix}all.pickle")
 
 
 def connect(p:DotDict, logger:logging.Logger):
-    gals = pklload(f"{p.resultdir}/{p.logprefix}all.pickle")
+    gals = pklload(f"{p.resultdir}/{p.fileprefix}all.pickle")
     complete = True
     for iout in p.nout:
         temp = gals[gals['timestep']==iout]
         if(len(temp)!=np.max(temp['id'])):
             complete = False
     go=True
-    if os.path.exists(f"{p.resultdir}/{p.logprefix}stable.pickle"):
-        ans=input(f"You already have `{p.resultdir}/{p.logprefix}stable.pickle`. Ovewrite? [Y/N]")
+    if os.path.exists(f"{p.resultdir}/{p.fileprefix}stable.pickle"):
+        ans=input(f"You already have `{p.resultdir}/{p.fileprefix}stable.pickle`. Ovewrite? [Y/N]")
         go = ans in yess
     if go:
         logger.info("Make dictionary from catalogue...")
@@ -359,22 +387,22 @@ def connect(p:DotDict, logger:logging.Logger):
                     ihalo_iout['fat_score'] = ipscore
                     logger.debug(f"\t{iid} newly has fat{iprog}({ipscore:.2f})")
 
-        pklsave(inst, f"{p.resultdir}/{p.logprefix}fatson.pickle", overwrite=True)
-        logger.info(f"`{p.resultdir}/{p.logprefix}fatson.pickle` saved\n")    
-        print(f"`{p.resultdir}/{p.logprefix}fatson.pickle` saved\n")
+        pklsave(inst, f"{p.resultdir}/{p.fileprefix}fatson.pickle", overwrite=True)
+        logger.info(f"`{p.resultdir}/{p.fileprefix}fatson.pickle` saved\n")    
+        print(f"`{p.resultdir}/{p.fileprefix}fatson.pickle` saved\n")
 
 def build_branch(p:DotDict, logger:logging.Logger):
     logger.info("Build branches...")
     print("Build branches...")
-    inst = pklload(f"{p.resultdir}/{p.logprefix}fatson.pickle")
+    inst = pklload(f"{p.resultdir}/{p.fileprefix}fatson.pickle")
     complete = True
     for iout in p.nout:
         temp = inst[iout]
         if(len(temp)!=np.max(temp['id'])):
             complete = False
     go=True
-    if os.path.exists(f"{p.resultdir}/{p.logprefix}stable.pickle"):
-        ans=input(f"You already have `{p.resultdir}/{p.logprefix}stable.pickle`. Ovewrite? [Y/N]")
+    if os.path.exists(f"{p.resultdir}/{p.fileprefix}stable.pickle"):
+        ans=input(f"You already have `{p.resultdir}/{p.fileprefix}stable.pickle`. Ovewrite? [Y/N]")
         go = ans in yess
     if go:
         logger.info("Build branches forward...")
@@ -422,29 +450,29 @@ def build_branch(p:DotDict, logger:logging.Logger):
         for iout in iterobj:
             iinst = inst[iout]
             gals = iinst if gals is None else np.hstack((gals, iinst))
-        pklsave(gals, f"{p.resultdir}/{p.logprefix}stable.pickle", overwrite=True)
-        logger.info(f"`{p.resultdir}/{p.logprefix}stable.pickle` saved\n")                                    
-        print(f"`{p.resultdir}/{p.logprefix}stable.pickle` saved\n")
+        pklsave(gals, f"{p.resultdir}/{p.fileprefix}stable.pickle", overwrite=True)
+        logger.info(f"`{p.resultdir}/{p.fileprefix}stable.pickle` saved\n")                                    
+        print(f"`{p.resultdir}/{p.fileprefix}stable.pickle` saved\n")
                             
 
 
 # @debugf(ontime=True, onmem=True, oncpu=True)
 def connect_legacy(p:DotDict, logger:logging.Logger):
-    gals = pklload(f"{p.resultdir}/{p.logprefix}all.pickle")
+    gals = pklload(f"{p.resultdir}/{p.fileprefix}all.pickle")
     complete = True
     for iout in p.nout:
         temp = gals[gals['timestep']==iout]
         if(len(temp)!=np.max(temp['id'])):
             complete = False
     go=True
-    if os.path.exists(f"{p.resultdir}/{p.logprefix}stable.pickle"):
-        ans=input(f"You already have `{p.resultdir}/{p.logprefix}stable.pickle`. Ovewrite? [Y/N]")
+    if os.path.exists(f"{p.resultdir}/{p.fileprefix}stable.pickle"):
+        ans=input(f"You already have `{p.resultdir}/{p.fileprefix}stable.pickle`. Ovewrite? [Y/N]")
         go = ans in yess
     if go:
-        if not (os.path.exists(f"{p.resultdir}/{p.logprefix}stage_4.pickle")):
-            if not (os.path.exists(f"{p.resultdir}/{p.logprefix}stage_3.pickle")):
-                if not (os.path.exists(f"{p.resultdir}/{p.logprefix}stage_2.pickle")):
-                    if not (os.path.exists(f"{p.resultdir}/{p.logprefix}stage_1.pickle")):
+        if not (os.path.exists(f"{p.resultdir}/{p.fileprefix}stage_4.pickle")):
+            if not (os.path.exists(f"{p.resultdir}/{p.fileprefix}stage_3.pickle")):
+                if not (os.path.exists(f"{p.resultdir}/{p.fileprefix}stage_2.pickle")):
+                    if not (os.path.exists(f"{p.resultdir}/{p.fileprefix}stage_1.pickle")):
                         logger.info("Make dictionary from catalogue...")
                         gals = append_fields(gals, "from", np.zeros(len(gals), dtype=np.int32), usemask=False)
                         gals = append_fields(gals, "fat", np.zeros(len(gals), dtype=np.int32), usemask=False)
@@ -554,9 +582,9 @@ def connect_legacy(p:DotDict, logger:logging.Logger):
                                                         logger.debug(f"\t\t{idesc} change original fat {dhalo['fat']} ({dhalo['fat_score']:.4f}) to {-prog} ({pscore:.4f})")
                                                         dhalo['fat'] = -prog
                                                         dhalo['fat_score'] = pscore
-                        pklsave(inst, f"{p.resultdir}/{p.logprefix}stage_1.pickle", overwrite=True)
-                        logger.info(f"`{p.resultdir}/{p.logprefix}stage_1.pickle` saved\n")                                    
-                    inst = pklload(f"{p.resultdir}/{p.logprefix}stage_1.pickle")
+                        pklsave(inst, f"{p.resultdir}/{p.fileprefix}stage_1.pickle", overwrite=True)
+                        logger.info(f"`{p.resultdir}/{p.fileprefix}stage_1.pickle` saved\n")                                    
+                    inst = pklload(f"{p.resultdir}/{p.fileprefix}stage_1.pickle")
 
                     logger.info("Connect same Last...")
                     for iout in p.nout:
@@ -575,9 +603,9 @@ def connect_legacy(p:DotDict, logger:logging.Logger):
                                 prog = gethalo(gal['fat'], halos=inst, complete=complete)
                                 if(np.abs(prog['son']) == gal2id(gal)):
                                     prog['last'] = last
-                    pklsave(inst, f"{p.resultdir}/{p.logprefix}stage_2.pickle", overwrite=True)
-                    logger.info(f"`{p.resultdir}/{p.logprefix}stage_2.pickle` saved\n")                                    
-                inst = pklload(f"{p.resultdir}/{p.logprefix}stage_2.pickle")
+                    pklsave(inst, f"{p.resultdir}/{p.fileprefix}stage_2.pickle", overwrite=True)
+                    logger.info(f"`{p.resultdir}/{p.fileprefix}stage_2.pickle` saved\n")                                    
+                inst = pklload(f"{p.resultdir}/{p.fileprefix}stage_2.pickle")
 
                 logger.info("Connect same From...")
                 for iout in p.nout[::-1]:
@@ -598,19 +626,19 @@ def connect_legacy(p:DotDict, logger:logging.Logger):
                             desc = gethalo(gal['son'], halos=inst, complete=complete)
                             if np.abs(desc['fat']) == gal2id(gal):
                                 desc['from'] = From
-                pklsave(inst, f"{p.resultdir}/{p.logprefix}stage_3.pickle", overwrite=True)
-                logger.info(f"`{p.resultdir}/{p.logprefix}stage_3.pickle` saved\n")                                    
-            inst = pklload(f"{p.resultdir}/{p.logprefix}stage_3.pickle")
+                pklsave(inst, f"{p.resultdir}/{p.fileprefix}stage_3.pickle", overwrite=True)
+                logger.info(f"`{p.resultdir}/{p.fileprefix}stage_3.pickle` saved\n")                                    
+            inst = pklload(f"{p.resultdir}/{p.fileprefix}stage_3.pickle")
 
             logger.info("Recover catalogue from dictionary...")
             gals = None
             for iout in p.nout:
                 iinst = inst[iout]
                 gals = iinst if gals is None else np.hstack((gals, iinst))
-            pklsave(gals, f"{p.resultdir}/{p.logprefix}stage_4.pickle", overwrite=True)
-            logger.info(f"`{p.resultdir}/{p.logprefix}stage_4.pickle` saved\n")                                    
-        gals = pklload(f"{p.resultdir}/{p.logprefix}stage_4.pickle")
-        inst = pklload(f"{p.resultdir}/{p.logprefix}stage_3.pickle")
+            pklsave(gals, f"{p.resultdir}/{p.fileprefix}stage_4.pickle", overwrite=True)
+            logger.info(f"`{p.resultdir}/{p.fileprefix}stage_4.pickle` saved\n")                                    
+        gals = pklload(f"{p.resultdir}/{p.fileprefix}stage_4.pickle")
+        inst = pklload(f"{p.resultdir}/{p.fileprefix}stage_3.pickle")
 
         logger.info("Find fragmentation...")
         # 1) Pick up each branch based on `from`
@@ -686,8 +714,8 @@ def connect_legacy(p:DotDict, logger:logging.Logger):
         gals['from'] = From
         gals['last'] = Last
         gals['merged'] = Merg
-        pklsave(gals, f"{p.resultdir}/{p.logprefix}stable.pickle", overwrite=True)
-        logger.info(f"`{p.resultdir}/{p.logprefix}stable.pickle` saved\n")
+        pklsave(gals, f"{p.resultdir}/{p.fileprefix}stable.pickle", overwrite=True)
+        logger.info(f"`{p.resultdir}/{p.fileprefix}stable.pickle` saved\n")
 
 
 
@@ -766,8 +794,8 @@ class memory_tracker():
         self.ref = MB()
 
 class timer():
-    __slots__ = ['ref', 'units', 'corr', 'unit', 'text', 'verbose', 'logger', 'level']
-    def __init__(self, unit:str="sec",text:str="", verbose:bool=True, logger:logging.Logger=None, level:str='info'):
+    __slots__ = ['ref', 'units', 'corr', 'unit', 'text', 'verbose', 'logger', 'level', 'mint']
+    def __init__(self, unit:str="sec",text:str="", verbose:bool=True, logger:logging.Logger=None, level:str='info', mint:float=0):
         self.ref = time.time()
         self.units = {"ms":1/1000, "sec":1, "min":60, "hr":3600}
         self.corr = self.units[unit]
@@ -776,6 +804,7 @@ class timer():
         self.verbose=verbose
         self.logger=logger
         self.level = level
+        self.mint = mint
         if(self.verbose):
             if self.logger is not None:
                 if self.level == 'info': self.logger.info(f"{text} START")
@@ -785,11 +814,12 @@ class timer():
     def done(self, add=None):
         if(self.verbose):
             elapse = time.time()-self.ref
-            if add is not None: self.text = f"{self.text} {add}"
-            if self.logger is not None:
-                if self.level == 'info': self.logger.info(f"{self.text} Done ({elapse/self.corr:.3f} {self.unit})")
-                else: self.logger.debug(f"{self.text} Done ({elapse/self.corr:.3f} {self.unit})")
-            else: print(f"{self.text} Done ({elapse/self.corr:.3f} {self.unit})")
+            if(elapse>=self.mint):
+                if add is not None: self.text = f"{self.text} {add}"
+                if self.logger is not None:
+                    if self.level == 'info': self.logger.info(f"{self.text} Done ({elapse/self.corr:.3f} {self.unit})")
+                    else: self.logger.debug(f"{self.text} Done ({elapse/self.corr:.3f} {self.unit})")
+                else: print(f"{self.text} Done ({elapse/self.corr:.3f} {self.unit})")
 
 import threading
 class DisplayCPU(threading.Thread):

@@ -16,10 +16,10 @@ mode = "y06098" #   Simulation name (should be supported by rur)
 #       "nc":       NewCluster
 #       None
 
-galaxy = False # True: galaxy, False: halo
+galaxy = True # True: galaxy, False: halo
 fullpath=None # Full path to the HaloMaker output directory
 nsnap = 4 # The number of snapshots to be considered when making trees
-mcut = 0.01# Number fraction threshold for the prog/desc candidates
+mcut = 0.001# Number fraction threshold for the prog/desc candidates
 
 
 
@@ -33,11 +33,11 @@ mcut = 0.01# Number fraction threshold for the prog/desc candidates
 #---------------------------------------------------------------------
 
 # ! This is overwritten by the command line arguments (-n or --ncpu) !
-ncpu = 24 # Set nthread in numba and OpenMP
+ncpu = 36 # Set nthread in numba and OpenMP
 loadall = False # Load all galaxies and particles at once
 usefortran = False # Use Fortran for particle loading
 takeover = True # If True, the treebase is taken over from the previous run
-flushGB = 150 # Memory threshold for auto-flush in Gigabytes
+flushGB = 100 # Memory threshold for auto-flush in Gigabytes
 nice = 1 # set os nice value
 
 
@@ -50,10 +50,10 @@ nice = 1 # set os nice value
 #       These parameters decide the logging format
 #---------------------------------------------------------------------
 
-path_in_repo = "YoungTree" # Where output and log files are saved
+path_in_repo = "YoungTree_Massive" # Where output and log files are saved
 fileprefix = "ytree_"
-logprefix = f"ytree_dm_" # file name of ytree log (./logprefix_iout.log)
-detail = False # Detail debugging in log (True: DEBUG level, False: INFO level)
+logprefix = f"ytree_" # file name of ytree log (./logprefix_iout.log)
+detail = True # Detail debugging in log (True: DEBUG level, False: INFO level)
 ontime = True # Time check
 onmem = False # Memory check
 oncpu = False # CPU check

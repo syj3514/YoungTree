@@ -8,6 +8,11 @@ from numba import set_num_threads
 import gc
 import argparse, subprocess
 
+# Current Issue:
+# - When rerun, file name is written as "logprefix_"
+# - However, let's fix it for fixed prefix: ytree_, but only for log file follows logprefix
+# - Also, we have lot's of trash files for `ytree_re`. Let's extract nice info from that:
+
 # Read command
 print("ex: $ python3 YoungTree.py params.py [--ncpu 32] [--mode y07206]")
 # args = sys.argv
@@ -23,10 +28,10 @@ if __name__=='__main__':
     # Read params
     params = make_params_dict(args.params, mode=args.mode)
     if(params.nice>0): os.nice(params.nice)
-    mainlog, resultdir,_ = make_log(params.repo, "main", detail=params.detail, prefix=params.logprefix)
+    mainlog, resultdir,fname = make_log(params.repo, "main", detail=params.detail, prefix=params.logprefix, path_in_repo=params.path_in_repo)
     params.resultdir = resultdir
     mainlog.info(f"\nAllow {params.flushGB:.2f} GB Memory\n"); print(f"\nAllow {params.flushGB:.2f} GB Memory\n")
-    mainlog.info(f"\nSee `{params.resultdir}`\n"); print(f"\nSee `{params.resultdir}`\n")
+    mainlog.info(f"\nSee `{fname}`\n"); print(f"\nSee `{fname}`\n")
     if(args.ncpu is not None): params.ncpu = args.ncpu
     set_num_threads(params.ncpu)
 
@@ -34,21 +39,35 @@ if __name__=='__main__':
         os.mkdir(f"{params.resultdir}/by-product")
     if not os.path.exists(f"{params.resultdir}/log"):
         os.mkdir(f"{params.resultdir}/log")
+    fout = np.max(params.nout)
+    if os.path.exists(f"{params.resultdir}/{params.fileprefix}stable.pickle"):
+        mainlog.info(f"`{params.resultdir}/{params.fileprefix}stable.pickle` found... check status...")
+        stable = pklload(f"{params.resultdir}/{params.fileprefix}stable.pickle")
+        maxout = np.max(stable['timestep'])
+        further = maxout < fout
     try:
-        if not os.path.exists(f"{params.resultdir}/{params.logprefix}stable.pickle"):
-            if not os.path.exists(f"{params.resultdir}/{params.logprefix}fatson.pickle"):
-                if not os.path.exists(f"{params.resultdir}/{params.logprefix}all.pickle"):
-                    if not os.path.exists(f"{params.resultdir}/by-product/{params.logprefix}checkpoint.pickle"):
-                        if(not os.path.exists(f"{params.resultdir}/{params.logprefix}treebase.temp.pickle")):
+        if (not os.path.exists(f"{params.resultdir}/{params.fileprefix}stable.pickle"))or(further):
+            if (not os.path.exists(f"{params.resultdir}/{params.fileprefix}fatson.pickle"))or(further):
+                if (not os.path.exists(f"{params.resultdir}/{params.fileprefix}all.pickle"))or(further):
+                    if (not os.path.exists(f"{params.resultdir}/by-product/{params.fileprefix}checkpoint.pickle"))or(further):
+                        if(not os.path.exists(f"{params.resultdir}/{params.logprefix}treebase.temp.pickle"))or(not params.takeover):
                             treebase = yroot.TreeBase(params, logger=mainlog)
                             pklsave(treebase, f"{params.resultdir}/{params.logprefix}treebase.temp.pickle", overwrite=True)
                             del treebase
                         reftime = time.time()
-                        fout = np.max(params.nout)
                         for iout in params.nout:
-                            if os.path.exists(f"{params.resultdir}/by-product/{params.logprefix}{iout:05d}.pickle"):
-                                fout = np.max(params.nout[params.nout<iout])
-                                continue
+                            if os.path.exists(f"{params.resultdir}/by-product/{params.fileprefix}{iout:05d}.pickle"):
+                                if(params.takeover):
+                                    if(iout == np.max(params.nout))and(params.takeover)and(not params.default):
+                                        mainlog.info("Calculate last pids...")
+                                        treebase = pklload(f"{params.resultdir}/{params.logprefix}treebase.temp.pickle")
+                                        treebase.load_gals(iout)
+                                        pklsave(treebase, f"{params.resultdir}/{params.logprefix}treebase.temp.pickle", overwrite=True)
+                                    fout = np.max(params.nout[params.nout<iout])
+                                    continue
+                                else:
+                                    mainlog.warning(f"! No takeover ! Remove `{resultdir}/by-product/{params.fileprefix}{iout:05d}.pickle`")
+                                    os.remove(f"{params.resultdir}/by-product/{params.fileprefix}{iout:05d}.pickle")
                             subdir = os.getcwd()
                             if(not 'YoungTree' in subdir): subdir = f"{subdir}/YoungTree"
 
@@ -60,10 +79,10 @@ if __name__=='__main__':
                             if(os.path.exists(f"{params.resultdir}/{params.logprefix}success.tmp")):
                                 os.remove(f"{params.resultdir}/{params.logprefix}success.tmp")
                             else:
-                                if(os.path.exists(f"{params.resultdir}/by-product/{params.logprefix}{iout:05d}.pickle")):
+                                if(os.path.exists(f"{params.resultdir}/by-product/{params.fileprefix}{iout:05d}.pickle")):
                                     pass
                                 else:
-                                    if(os.path.exists(f"{params.resultdir}/by-product/{params.logprefix}{iout:05d}_temp")):
+                                    if(os.path.exists(f"{params.resultdir}/by-product/{params.fileprefix}{iout:05d}_temp")):
                                         pass
                                     else:
                                         raise RuntimeError("No success.tmp")
@@ -84,7 +103,7 @@ if __name__=='__main__':
                         treebase.out_on_table=[]
                         treebase.mainlog.info(f"\n{treebase.summary()}\n")
                         
-                        pklsave(np.array([]), f"{params.resultdir}/by-product/{params.logprefix}checkpoint.pickle")
+                        pklsave(np.array([]), f"{params.resultdir}/by-product/{params.fileprefix}checkpoint.pickle")
                         treebase.mainlog.info("\nLeaf save Done\n"); print("\nLeaf save Done\n")
                         treebase = None
                         del treebase
@@ -96,18 +115,18 @@ if __name__=='__main__':
                     mainlog.info("\nGather Done\n"); print("\nGather Done\n")
                     
                 mainlog.info("\nConnect Start\n"); print("\nConnect Start\n")
-                connectlog, resultdir,_ = make_log(params.repo, "connect", detail=params.detail, prefix=params.logprefix)
+                connectlog, resultdir,_ = make_log(params.repo, "connect", detail=params.detail, prefix=params.logprefix, path_in_repo=params.path_in_repo)
                 func = DebugDecorator(connect, params=params, logger=connectlog)
                 func(params, connectlog)
                 mainlog.info("\nConnect Done\n"); print("\nConnect Done\n")
 
             mainlog.info("\nBuild Start\n"); print("\nBuild Start\n")
-            buildlog, resultdir,_ = make_log(params.repo, "build", detail=params.detail, prefix=params.logprefix)
+            buildlog, resultdir,_ = make_log(params.repo, "build", detail=params.detail, prefix=params.logprefix, path_in_repo=params.path_in_repo)
             func = DebugDecorator(build_branch, params=params, logger=buildlog)
             func(params, buildlog)
             mainlog.info("\nBuild Done\n"); print("\nBuild Done\n")
 
-        mainlog.info(f"\nYoungTree Done\nSee `{params.resultdir}/{params.logprefix}stable.pickle`"); print(f"\nYoungTree Done\nSee `{params.resultdir}/{params.logprefix}stable.pickle`")
+        mainlog.info(f"\nYoungTree Done\nSee `{params.resultdir}/{params.fileprefix}stable.pickle`"); print(f"\nYoungTree Done\nSee `{params.resultdir}/{params.fileprefix}stable.pickle`")
     except Exception as e:
         print(); mainlog.error("")
         print(traceback.format_exc()); mainlog.error(traceback.format_exc())
