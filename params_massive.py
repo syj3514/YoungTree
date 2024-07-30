@@ -51,6 +51,7 @@ nice = 1 # set os nice value
 #---------------------------------------------------------------------
 
 path_in_repo = "YoungTree_Massive" # Where output and log files are saved
+fileprefix = "ytree_"
 logprefix = f"ytree_" # file name of ytree log (./logprefix_iout.log)
 detail = True # Detail debugging in log (True: DEBUG level, False: INFO level)
 ontime = True # Time check

@@ -4,7 +4,7 @@
 #---------------------------------------------------------------------
 
 # ! This is overwritten by the command line arguments (-m or --mode) !
-mode = "y06098" #   Simulation name (should be supported by rur)
+mode = "nc" #   Simulation name (should be supported by rur)
 #       "hagn":     Horizon-AGN
 #       "y01605":   YZiCS 01605
 #       "y04466":   YZiCS 04466
@@ -20,7 +20,7 @@ galaxy = True # True: galaxy, False: halo
 fullpath=None # Full path to the HaloMaker output directory
 nsnap = 4 # The number of snapshots to be considered when making trees
 mcut = 0.01# Number fraction threshold for the prog/desc candidates
-
+finalout = 411 # Maximum output number to be considered
 
 
 
@@ -32,11 +32,11 @@ mcut = 0.01# Number fraction threshold for the prog/desc candidates
 #---------------------------------------------------------------------
 
 # ! This is overwritten by the command line arguments (-n or --ncpu) !
-ncpu = 24 # Set nthread in numba and OpenMP
+ncpu = 48 # Set nthread in numba and OpenMP
 loadall = False # Load all galaxies and particles at once
 usefortran = False # Use Fortran for particle loading
 takeover = True # If True, the treebase is taken over from the previous run
-flushGB = 100 # Memory threshold for auto-flush in Gigabytes
+flushGB = 400 # Memory threshold for auto-flush in Gigabytes
 nice = 1 # set os nice value
 
 
@@ -50,13 +50,14 @@ nice = 1 # set os nice value
 #---------------------------------------------------------------------
 
 path_in_repo = "YoungTree" # Where output and log files are saved
-logprefix = f"ytree_" # file name of ytree log (./logprefix_iout.log)
+fileprefix = "ytree_"
+logprefix = f"ytree_re_" # file name of ytree log (./logprefix_iout.log)
 detail = False # Detail debugging in log (True: DEBUG level, False: INFO level)
 ontime = True # Time check
 onmem = False # Memory check
 oncpu = False # CPU check
-verbose = 5 # Verbosity level (0: quiet, 5: verbose)
-mint = 1 # Minimum time for logging (`Done` prints only if t > mint)
+verbose = 1 # Verbosity level (0: quiet, 5: verbose)
+mint = 0 # Minimum time for logging (`Done` prints only if t > mint)
 
 
 
@@ -78,6 +79,7 @@ mint = 1 # Minimum time for logging (`Done` prints only if t > mint)
 #         However, in other snapshots, if the galaxy is not selected as a progenitor and
 #         if the galaxy is not satisfied, the galaxy is removed from the tree.
 #---------------------------------------------------------------------
+light = False
 default = True
 if(default):
     def filtering(gals):

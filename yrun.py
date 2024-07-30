@@ -51,10 +51,10 @@ def do_onestep(Tree:'TreeBase', iout:int, fout:int, reftot:float=time.time()):
         logname = Tree.mainlog.name
         Tree.mainlog = follow_log(logname, detail=Tree.p.detail)
         # Fully saved
-        if os.path.exists(f"{resultdir}/by-product/{Tree.p.logprefix}{iout:05d}.pickle"):
+        if os.path.exists(f"{resultdir}/by-product/{Tree.p.fileprefix}{iout:05d}.pickle"):
             if(not Tree.p.takeover):
-                Tree.mainlog.warning(f"! No takeover ! Remove `{resultdir}/by-product/{Tree.p.logprefix}{iout:05d}.pickle`")
-                os.remove(f"{resultdir}/by-product/{Tree.p.logprefix}{iout:05d}.pickle")
+                Tree.mainlog.warning(f"! No takeover ! Remove `{resultdir}/by-product/{Tree.p.fileprefix}{iout:05d}.pickle`")
+                os.remove(f"{resultdir}/by-product/{Tree.p.fileprefix}{iout:05d}.pickle")
             else:
                 Tree.mainlog.info(f"[Queue] {iout} is done --> Skip\n")
                 skip=True
@@ -141,7 +141,7 @@ def do_onestep(Tree:'TreeBase', iout:int, fout:int, reftot:float=time.time()):
                 outs = Tree.out_on_table
                 for out in outs:
                     if out > cutout:
-                        if(os.path.exists(f"{resultdir}/by-product/{Tree.p.logprefix}{out:05d}.pickle")):
+                        if(os.path.exists(f"{resultdir}/by-product/{Tree.p.fileprefix}{out:05d}.pickle")):
                             Tree.out_of_use.append(out)
                         else:
                             Tree.finalize(out, level='info')
@@ -180,14 +180,14 @@ def do_onestep(Tree:'TreeBase', iout:int, fout:int, reftot:float=time.time()):
 # @debugf(ontime=True, onmem=True, oncpu=True)
 def gather(p:DotDict, logger:logging.Logger):
     go=True
-    if os.path.exists(f"{p.resultdir}/{p.logprefix}all.pickle"):
-        ans=input(f"You already have `{p.resultdir}/{p.logprefix}all.pickle`. Ovewrite? [Y/N]")
+    if os.path.exists(f"{p.resultdir}/{p.fileprefix}all.pickle"):
+        ans=input(f"You already have `{p.resultdir}/{p.fileprefix}all.pickle`. Ovewrite? [Y/N]")
         go = ans in yess
     if go:
         logger.info("Gather all files...")
         print("Gather all files...")
         for i, iout in enumerate(p.nout):
-            brick = pklload(f"{p.resultdir}/by-product/{p.logprefix}{iout:05d}.pickle")
+            brick = pklload(f"{p.resultdir}/by-product/{p.fileprefix}{iout:05d}.pickle")
             if(not 'host' in brick.dtype.names):
                 field_names = brick.dtype.names
                 dtypes = brick.dtype.descr
@@ -227,22 +227,22 @@ def gather(p:DotDict, logger:logging.Logger):
                 descscore = gal['desc_score'][:,0]
                 gal['desc'] = desc[arg].astype(np.int32)
                 gal['desc_score'] = descscore[arg].astype(np.float64)
-        pklsave(gals, f"{p.resultdir}/{p.logprefix}all.pickle", overwrite=True)
-        logger.info(f"`{p.resultdir}/{p.logprefix}all.pickle` saved\n")
-        print(f"`{p.resultdir}/{p.logprefix}all.pickle` saved\n")
-    # gals = pklload(f"{p.resultdir}/{p.logprefix}all.pickle")
+        pklsave(gals, f"{p.resultdir}/{p.fileprefix}all.pickle", overwrite=True)
+        logger.info(f"`{p.resultdir}/{p.fileprefix}all.pickle` saved\n")
+        print(f"`{p.resultdir}/{p.fileprefix}all.pickle` saved\n")
+    # gals = pklload(f"{p.resultdir}/{p.fileprefix}all.pickle")
 
 
 def connect(p:DotDict, logger:logging.Logger):
-    gals = pklload(f"{p.resultdir}/{p.logprefix}all.pickle")
+    gals = pklload(f"{p.resultdir}/{p.fileprefix}all.pickle")
     complete = True
     for iout in p.nout:
         temp = gals[gals['timestep']==iout]
         if(len(temp)!=np.max(temp['id'])):
             complete = False
     go=True
-    if os.path.exists(f"{p.resultdir}/{p.logprefix}stable.pickle"):
-        ans=input(f"You already have `{p.resultdir}/{p.logprefix}stable.pickle`. Ovewrite? [Y/N]")
+    if os.path.exists(f"{p.resultdir}/{p.fileprefix}stable.pickle"):
+        ans=input(f"You already have `{p.resultdir}/{p.fileprefix}stable.pickle`. Ovewrite? [Y/N]")
         go = ans in yess
     if go:
         logger.info("Make dictionary from catalogue...")
@@ -387,22 +387,22 @@ def connect(p:DotDict, logger:logging.Logger):
                     ihalo_iout['fat_score'] = ipscore
                     logger.debug(f"\t{iid} newly has fat{iprog}({ipscore:.2f})")
 
-        pklsave(inst, f"{p.resultdir}/{p.logprefix}fatson.pickle", overwrite=True)
-        logger.info(f"`{p.resultdir}/{p.logprefix}fatson.pickle` saved\n")    
-        print(f"`{p.resultdir}/{p.logprefix}fatson.pickle` saved\n")
+        pklsave(inst, f"{p.resultdir}/{p.fileprefix}fatson.pickle", overwrite=True)
+        logger.info(f"`{p.resultdir}/{p.fileprefix}fatson.pickle` saved\n")    
+        print(f"`{p.resultdir}/{p.fileprefix}fatson.pickle` saved\n")
 
 def build_branch(p:DotDict, logger:logging.Logger):
     logger.info("Build branches...")
     print("Build branches...")
-    inst = pklload(f"{p.resultdir}/{p.logprefix}fatson.pickle")
+    inst = pklload(f"{p.resultdir}/{p.fileprefix}fatson.pickle")
     complete = True
     for iout in p.nout:
         temp = inst[iout]
         if(len(temp)!=np.max(temp['id'])):
             complete = False
     go=True
-    if os.path.exists(f"{p.resultdir}/{p.logprefix}stable.pickle"):
-        ans=input(f"You already have `{p.resultdir}/{p.logprefix}stable.pickle`. Ovewrite? [Y/N]")
+    if os.path.exists(f"{p.resultdir}/{p.fileprefix}stable.pickle"):
+        ans=input(f"You already have `{p.resultdir}/{p.fileprefix}stable.pickle`. Ovewrite? [Y/N]")
         go = ans in yess
     if go:
         logger.info("Build branches forward...")
@@ -450,29 +450,29 @@ def build_branch(p:DotDict, logger:logging.Logger):
         for iout in iterobj:
             iinst = inst[iout]
             gals = iinst if gals is None else np.hstack((gals, iinst))
-        pklsave(gals, f"{p.resultdir}/{p.logprefix}stable.pickle", overwrite=True)
-        logger.info(f"`{p.resultdir}/{p.logprefix}stable.pickle` saved\n")                                    
-        print(f"`{p.resultdir}/{p.logprefix}stable.pickle` saved\n")
+        pklsave(gals, f"{p.resultdir}/{p.fileprefix}stable.pickle", overwrite=True)
+        logger.info(f"`{p.resultdir}/{p.fileprefix}stable.pickle` saved\n")                                    
+        print(f"`{p.resultdir}/{p.fileprefix}stable.pickle` saved\n")
                             
 
 
 # @debugf(ontime=True, onmem=True, oncpu=True)
 def connect_legacy(p:DotDict, logger:logging.Logger):
-    gals = pklload(f"{p.resultdir}/{p.logprefix}all.pickle")
+    gals = pklload(f"{p.resultdir}/{p.fileprefix}all.pickle")
     complete = True
     for iout in p.nout:
         temp = gals[gals['timestep']==iout]
         if(len(temp)!=np.max(temp['id'])):
             complete = False
     go=True
-    if os.path.exists(f"{p.resultdir}/{p.logprefix}stable.pickle"):
-        ans=input(f"You already have `{p.resultdir}/{p.logprefix}stable.pickle`. Ovewrite? [Y/N]")
+    if os.path.exists(f"{p.resultdir}/{p.fileprefix}stable.pickle"):
+        ans=input(f"You already have `{p.resultdir}/{p.fileprefix}stable.pickle`. Ovewrite? [Y/N]")
         go = ans in yess
     if go:
-        if not (os.path.exists(f"{p.resultdir}/{p.logprefix}stage_4.pickle")):
-            if not (os.path.exists(f"{p.resultdir}/{p.logprefix}stage_3.pickle")):
-                if not (os.path.exists(f"{p.resultdir}/{p.logprefix}stage_2.pickle")):
-                    if not (os.path.exists(f"{p.resultdir}/{p.logprefix}stage_1.pickle")):
+        if not (os.path.exists(f"{p.resultdir}/{p.fileprefix}stage_4.pickle")):
+            if not (os.path.exists(f"{p.resultdir}/{p.fileprefix}stage_3.pickle")):
+                if not (os.path.exists(f"{p.resultdir}/{p.fileprefix}stage_2.pickle")):
+                    if not (os.path.exists(f"{p.resultdir}/{p.fileprefix}stage_1.pickle")):
                         logger.info("Make dictionary from catalogue...")
                         gals = append_fields(gals, "from", np.zeros(len(gals), dtype=np.int32), usemask=False)
                         gals = append_fields(gals, "fat", np.zeros(len(gals), dtype=np.int32), usemask=False)
@@ -582,9 +582,9 @@ def connect_legacy(p:DotDict, logger:logging.Logger):
                                                         logger.debug(f"\t\t{idesc} change original fat {dhalo['fat']} ({dhalo['fat_score']:.4f}) to {-prog} ({pscore:.4f})")
                                                         dhalo['fat'] = -prog
                                                         dhalo['fat_score'] = pscore
-                        pklsave(inst, f"{p.resultdir}/{p.logprefix}stage_1.pickle", overwrite=True)
-                        logger.info(f"`{p.resultdir}/{p.logprefix}stage_1.pickle` saved\n")                                    
-                    inst = pklload(f"{p.resultdir}/{p.logprefix}stage_1.pickle")
+                        pklsave(inst, f"{p.resultdir}/{p.fileprefix}stage_1.pickle", overwrite=True)
+                        logger.info(f"`{p.resultdir}/{p.fileprefix}stage_1.pickle` saved\n")                                    
+                    inst = pklload(f"{p.resultdir}/{p.fileprefix}stage_1.pickle")
 
                     logger.info("Connect same Last...")
                     for iout in p.nout:
@@ -603,9 +603,9 @@ def connect_legacy(p:DotDict, logger:logging.Logger):
                                 prog = gethalo(gal['fat'], halos=inst, complete=complete)
                                 if(np.abs(prog['son']) == gal2id(gal)):
                                     prog['last'] = last
-                    pklsave(inst, f"{p.resultdir}/{p.logprefix}stage_2.pickle", overwrite=True)
-                    logger.info(f"`{p.resultdir}/{p.logprefix}stage_2.pickle` saved\n")                                    
-                inst = pklload(f"{p.resultdir}/{p.logprefix}stage_2.pickle")
+                    pklsave(inst, f"{p.resultdir}/{p.fileprefix}stage_2.pickle", overwrite=True)
+                    logger.info(f"`{p.resultdir}/{p.fileprefix}stage_2.pickle` saved\n")                                    
+                inst = pklload(f"{p.resultdir}/{p.fileprefix}stage_2.pickle")
 
                 logger.info("Connect same From...")
                 for iout in p.nout[::-1]:
@@ -626,19 +626,19 @@ def connect_legacy(p:DotDict, logger:logging.Logger):
                             desc = gethalo(gal['son'], halos=inst, complete=complete)
                             if np.abs(desc['fat']) == gal2id(gal):
                                 desc['from'] = From
-                pklsave(inst, f"{p.resultdir}/{p.logprefix}stage_3.pickle", overwrite=True)
-                logger.info(f"`{p.resultdir}/{p.logprefix}stage_3.pickle` saved\n")                                    
-            inst = pklload(f"{p.resultdir}/{p.logprefix}stage_3.pickle")
+                pklsave(inst, f"{p.resultdir}/{p.fileprefix}stage_3.pickle", overwrite=True)
+                logger.info(f"`{p.resultdir}/{p.fileprefix}stage_3.pickle` saved\n")                                    
+            inst = pklload(f"{p.resultdir}/{p.fileprefix}stage_3.pickle")
 
             logger.info("Recover catalogue from dictionary...")
             gals = None
             for iout in p.nout:
                 iinst = inst[iout]
                 gals = iinst if gals is None else np.hstack((gals, iinst))
-            pklsave(gals, f"{p.resultdir}/{p.logprefix}stage_4.pickle", overwrite=True)
-            logger.info(f"`{p.resultdir}/{p.logprefix}stage_4.pickle` saved\n")                                    
-        gals = pklload(f"{p.resultdir}/{p.logprefix}stage_4.pickle")
-        inst = pklload(f"{p.resultdir}/{p.logprefix}stage_3.pickle")
+            pklsave(gals, f"{p.resultdir}/{p.fileprefix}stage_4.pickle", overwrite=True)
+            logger.info(f"`{p.resultdir}/{p.fileprefix}stage_4.pickle` saved\n")                                    
+        gals = pklload(f"{p.resultdir}/{p.fileprefix}stage_4.pickle")
+        inst = pklload(f"{p.resultdir}/{p.fileprefix}stage_3.pickle")
 
         logger.info("Find fragmentation...")
         # 1) Pick up each branch based on `from`
@@ -714,8 +714,8 @@ def connect_legacy(p:DotDict, logger:logging.Logger):
         gals['from'] = From
         gals['last'] = Last
         gals['merged'] = Merg
-        pklsave(gals, f"{p.resultdir}/{p.logprefix}stable.pickle", overwrite=True)
-        logger.info(f"`{p.resultdir}/{p.logprefix}stable.pickle` saved\n")
+        pklsave(gals, f"{p.resultdir}/{p.fileprefix}stable.pickle", overwrite=True)
+        logger.info(f"`{p.resultdir}/{p.fileprefix}stable.pickle` saved\n")
 
 
 
