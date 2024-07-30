@@ -4,7 +4,7 @@ import numpy as np
 import functools
 from collections import defaultdict
 from collections.abc import Iterable
-from multiprocessing import Pool, cpu_count
+from multiprocessing import Pool, cpu_count, shared_memory
 import multiprocessing as mp
 import copy
 import logging
@@ -965,3 +965,162 @@ class Leaf:
         if calc:
             val = self._calc_veloffset(otherleaf, selfind=selfind, otherind=otherind, prefix=prefix, level=level, verbose=verbose)
         return val
+
+
+
+
+    @_debug_leaf
+    def calc_score_mp(self, jout:int, otherleaves:list['Leaf'], prefix="", level='debug', verbose=0):
+        if not self.contam:
+            # for otherleaf in otherleaves:
+            leng = len(otherleaves)
+            ileaf_dict = self.selfsave()
+            changed = np.empty((leng,4), dtype=bool)
+            changed_mem = shared_memory.SharedMemory(name=make_shm_name(self.id, self.iout, jout, prefix="YoungTreeCha"). create=True, size=changed.nbytes)
+            ids = np.empty((leng,2), dtype=int)
+            ids_mem = shared_memory.SharedMemory(name=make_shm_name(self.id, self.iout, jout, prefix="YoungTreeID"). create=True, size=ids.nbytes)
+            ids = np.ndarray(ids.shape, dtype=int, buffer=self.ids_mem.buf)
+            scores = np.empty((leng,5), dtype=float)
+            scores_mem = shared_memory.SharedMemory(name=make_shm_name(self.id, self.iout, jout, 
+            prefix="YoungTreeSco"). create=True, size=scores.nbytes)
+            scores = np.ndarray(scores.shape, dtype=float, buffer=self.scores_mem.buf)
+            with Pool(processes=min(self.base.p.ncpu, leng)) as pool:
+                async_results = [pool.apply_async(_scores_mp, args=(ileaf_dict, otherleaf.selfsave(), jout, i, prefix, level, verbose, leng)) for i, otherleaf in enumerate(otherleaves)]
+                for r in async_results: r.get()
+            for i in range(leng):
+                ichange1, jchange2, ichange3, jchange4 = changed[i]
+                if ichange1:
+                    if(not jout in self.saved_matchrate.keys()):
+                        self.saved_matchrate[jout] = {}
+                        self.changed = True
+                    if(not otherleaves[i].id in self.saved_matchrate[jout].keys()):
+                        self.saved_matchrate[jout][otherleaves[i].id] = scores[i][0]
+                        self.changed = True
+                if jchange2:
+                    if(not self.iout in otherleaves[i].saved_matchrate.keys()):
+                        otherleaves[i].saved_matchrate[self.iout] = {}
+                        otherleaves[i].changed = True
+                    if(not self.id in otherleaves[i].saved_matchrate[self.iout].keys()):
+                        otherleaves[i].saved_matchrate[self.iout][self.id] = scores[i][0]
+                        otherleaves[i].changed = True
+                if ichange3:
+                    if(not jout in self.saved_veloffset.keys()):
+                        self.saved_veloffset[jout] = {}
+                        self.changed = True
+                    if(not otherleaves[i].id in self.saved_veloffset[jout].keys()):
+                        self.saved_veloffset[jout][otherleaves[i].id] = scores[i][0]
+                        self.changed = True
+                if jchange4:
+                    if(not self.iout in otherleaves[i].saved_veloffset.keys()):
+                        otherleaves[i].saved_veloffset[self.iout] = {}
+                        otherleaves[i].changed = True
+                    if(not self.id in otherleaves[i].saved_veloffset[self.iout].keys()):
+                        otherleaves[i].saved_veloffset[self.iout][self.id] = scores[i][0]
+                        otherleaves[i].changed = True
+            arg = np.argsort(scores[:, 0])
+            result_ids = np.copy(ids[arg][::-1])
+            result_scores = np.copy(scores[arg][::-1])
+
+            changed_mem.close(); changed_mem.unlink()
+            ids_mem.close(); ids_mem.unlink()
+            scores_mem.close(); scores_mem.unlink()
+            return result_ids, result_scores
+            # for i in range(leng):
+            #     otherleaf = otherleaves[i]
+            #     if otherleaf.iout != jout:
+            #         raise ValueError(f"Calc score at {jout} but found <{otherleaf.name}>!")
+            #     score1, selfind = self.calc_matchrate(otherleaf, prefix=prefix, verbose=verbose+1)
+            #     score2, otherind = otherleaf.calc_matchrate(self, prefix=prefix, verbose=verbose+1)
+            #     score3 = self.calc_veloffset(otherleaf, selfind=selfind, otherind=otherind, prefix=prefix, verbose=verbose+1)
+            #     score4 = np.exp( -np.abs(np.log10(self.cat['m']/otherleaf.cat['m'])) ) 
+            #     scores_tot = score1 + score2 + score3 + score4
+            #     scores[i] = (scores_tot, score1, score2, score3, score4)
+            #     ids[i] = (jout, otherleaf.id)
+            # arg = np.argsort(scores[:, 0])
+            # return ids[arg][::-1], scores[arg][::-1]
+
+def _scores_mp(ileaf_dict, jleaf_dict, jout, i, prefix, level, verbose, leng):
+    address = make_shm_name(ileaf_dict['gal']['id'], ileaf_dict['gal']['timestep'], jout, prefix="YoungTreeID")
+    exist = shared_memory.SharedMemory(name=address)
+    ids = np.ndarray((leng,2), dtype=int, buffer=exist.buf)
+    address = make_shm_name(ileaf_dict['gal']['id'], ileaf_dict['gal']['timestep'], jout, prefix="YoungTreeSco")
+    exist = shared_memory.SharedMemory(name=address)
+    scores = np.ndarray((leng,5), dtype=float, buffer=exist.buf)
+    address = make_shm_name(ileaf_dict['gal']['id'], ileaf_dict['gal']['timestep'], jout, prefix="YoungTreeCha")
+    exist = shared_memory.SharedMemory(name=address)
+    changed = np.ndarray((leng,4), dtype=bool, buffer=exist.buf)
+
+    score1, selfind, ichange1 = _calc_matchrate_mp(ileaf_dict, jleaf_dict)
+    score2, otherind, jchange2 = _calc_matchrate_mp(jleaf_dict, ileaf_dict)
+    score3, ichange3, jchange4 = _calc_veloffset_mp(ileaf_dict, jleaf_dict, selfind=selfind, otherind=otherind)
+    score4 = np.exp( -np.abs(np.log10(ileaf_dict['gal']['m']/jleaf_dict['gal']['m'])) )
+    scores[i] = (score1 + score2 + score3 + score4, score1, score2, score3, score4)
+    ids[i] = (jout, jleaf_dict['gal']['id'])
+    changed[i] = [ichange1, jchange2, ichange3, jchange4]
+
+# backup_keys = ["nparts", "id", "timestep", "host", "aexp", "m", "x", "y", "z", "vx", "vy", "vz", "r", "rvir", "mvir"]
+# backup['gal'] = self.cat
+# if not ('part' in backup.keys()):backup['part'] = {'nparts':self.nparts, 'id':self.pid, 'vx':self.pvx, 'vy':self.pvy, 'vz':self.pvz, 'weight':self.pweight}
+# backup['saved'] = {'matchrate':self.saved_matchrate, 'veloffset':self.saved_veloffset}
+
+def _calc_matchrate_mp(ileaf_dict, jleaf_dict):
+    large=False
+    ilen = len(ileaf_dict['part']['id']); jlen = len(jleaf_dict['part']['id'])
+    if(ilen >= 1e6)or(jlen >= 1e6):
+        large=True
+    elif(ilen*jlen >= 1e6):
+        if(min(ilen, jlen) >= 1e3):
+            large=True
+    ind = large_isin(ileaf_dict['part']['id'], jleaf_dict['part']['id']) if(large) else np.isin(ileaf_dict['part']['id'], jleaf_dict['part']['id'], assume_unique=True)
+
+    val = -1 if not True in ind else np.sum( ileaf_dict['part']['weight'][ind] )
+    jout = jleaf_dict['gal']['timestep']
+    if not jout in ileaf_dict['saved']['matchrate'].keys():
+        ileaf_dict['saved']['matchrate'][jout] = {}
+        changed = True
+    if not jleaf_dict['gal']['id'] in ileaf_dict['saved']['matchrate'][jout].keys():
+        ileaf_dict['saved']['matchrate'][jout][jleaf_dict['gal']['id']] = val
+        changed = True
+    return val, ind, changed
+
+def _calc_veloffset_mp(ileaf_dict, jleaf_dict, selfind=None, otherind=None):
+    calc=True
+    jout = jleaf_dict['gal']['timestep']
+    if jout in ileaf_dict['saved']['veloffset'].keys():
+        if jleaf_dict['gal']['id'] in ileaf_dict['saved']['veloffset'][jout].keys():
+            val = ileaf_dict['saved']['veloffset'][jout][jleaf_dict['gal']['id']]
+            calc = False
+            ichanged=False; jchanged=False
+    if calc:
+        if selfind is None: val, selfind = _calc_matchrate_mp(ileaf_dict, jleaf_dict)
+        if otherind is None: val, otherind = _calc_matchrate_mp(jleaf_dict, ileaf_dict)
+
+        if howmany(selfind, True) < 3: val=0
+        else:
+            selfv = _calc_bulkmotion_mp(ileaf_dict, selfind)
+            otherv = _calc_bulkmotion_mp(jleaf_dict, otherind)
+            val = 1 - nbnorm(otherv - selfv)/(nbnorm(selfv)+nbnorm(otherv))
+        jout = jleaf_dict['gal']['timestep']
+        if not jout in ileaf_dict['saved']['veloffset'].keys():
+            ileaf_dict['saved']['veloffset'][jout] = {}
+            ichanged = True
+        if not jleaf_dict['gal']['id'] in ileaf_dict['saved']['veloffset'][jout].keys():
+            ileaf_dict['saved']['veloffset'][jout][jleaf_dict['gal']['id']] = val
+            ichanged = True
+        if not ileaf_dict['gal']['timestep'] in jleaf_dict['saved']['veloffset'].keys():
+            jleaf_dict['saved']['veloffset'][ileaf_dict['gal']['timestep']] = {}
+            jchanged = True
+        if not ileaf_dict['gal']['id'] in jleaf_dict['saved']['veloffset'][ileaf_dict['gal']['timestep']].keys():
+            jleaf_dict['saved']['veloffset'][ileaf_dict['gal']['timestep']][ileaf_dict['gal']['id']] = val
+            jchanged = True
+    return val, ichanged, jchanged
+
+def _calc_bulkmotion_mp(ileaf_dict, checkind=None)
+    if checkind is None: checkind = np.full(ileaf_dict['part']['nparts'], True)
+
+    weights = ileaf_dict['part']['weight'][checkind]
+    weights /= np.sum(weights)
+    vx = nbsum( ileaf_dict['part']['vx'][checkind], weights ) - ileaf_dict['gal']['vx']
+    vy = nbsum( ileaf_dict['part']['vy'][checkind], weights ) - ileaf_dict['gal']['vy']
+    vz = nbsum( ileaf_dict['part']['vz'][checkind], weights ) - ileaf_dict['gal']['vz']
+    return np.array([vx, vy, vz])

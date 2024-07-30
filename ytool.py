@@ -139,6 +139,17 @@ def pklload(fname):
             # # to the value unpickled
             # arr = unpickler.load()
     return arr
+
+import datetime
+def make_shm_name(iid, iout, jout, prefix="YoungTree"):
+    now = datetime.datetime.now()
+    fname = f"{prefix}_L{iid:07d}at{iout:05d}_j{jout:05d}_u{os.getuid()}_{now.strftime('%Y%m%d_%H%M%S_%f')}"
+    count = 0
+    while(exists(f"/dev/shm/{fname}")):
+        fname = f"{prefix}_L{iid:07d}at{iout:05d}_j{jout:05d}_u{os.getuid()}_{now.strftime('%Y%m%d_%H%M%S_%f')}r{count}"
+        count += 1
+    return fname
+
 ####################################################################################################################
 # Connection
 ####################################################################################################################
