@@ -70,7 +70,7 @@ def make_params_dict(fname:str, mode=None) -> None:
         p[key] = params.__dict__[key]
     mode = p['mode'] if mode is None else mode
     p['mode'] = mode
-    dp = True if p['galaxy'] else False
+    dp = True# if p['galaxy'] else False
     if mode[0] == 'h':
         rurmode = 'hagn'; repo = f"/storage4/Horizon_AGN"; dp = False
     elif mode[0] == 'y':
@@ -83,6 +83,8 @@ def make_params_dict(fname:str, mode=None) -> None:
         rurmode = 'nc'; repo = "/storage7/NewCluster2"; dp = True
     elif mode == 'fornax':
         rurmode = 'fornax'; repo = '/storage5/FORNAX/KISTI_OUTPUT/l10006'
+    elif mode == 'custom':
+        from custom_mode import repo, rurmode, dp
     else:
         raise ValueError(f"{mode} is currently not supported!")
     p['rurmode'] = rurmode; p['repo'] = repo; p['dp'] = dp
@@ -145,7 +147,7 @@ def make_shm_name(iid, iout, jout, prefix="YoungTree"):
     now = datetime.datetime.now()
     fname = f"{prefix}_L{iid:07d}at{iout:05d}_j{jout:05d}_u{os.getuid()}_{now.strftime('%Y%m%d_%H%M%S_%f')}"
     count = 0
-    while(exists(f"/dev/shm/{fname}")):
+    while(os.path.exists(f"/dev/shm/{fname}")):
         fname = f"{prefix}_L{iid:07d}at{iout:05d}_j{jout:05d}_u{os.getuid()}_{now.strftime('%Y%m%d_%H%M%S_%f')}r{count}"
         count += 1
     return fname
@@ -304,6 +306,8 @@ def nbnorm(l:np.ndarray)->float:
     for i in range(l.shape[0]):
         s += l[i]**2
     return np.sqrt(s)
+def norm(l):
+    return np.sqrt(np.sum(l**2))
 
 @nb.jit(parallel=True, nopython=True)
 def large_isin(a, b):

@@ -572,7 +572,17 @@ class TreeBase:
                     otherleaves = [ileaf for ileaf in otherleaves if(not ileaf.contam)]
                     # Change above
                     # If contam, remake that leaf
-                    ids, scores = ileaf.calc_score(self.outs['j'], otherleaves, prefix=f"<{ileaf._name}>",level='debug', verbose=verbose+1) # CPU?
+                    ids, scores = ileaf.calc_score(self.outs['j'], otherleaves, prefix=f"<{ileaf._name}>",level='debug', verbose=verbose+1)
+                    # if(len(otherleaves)>1):
+                    #     self.print(f"Multiprocessing for {len(otherleaves)} cpus", level='debug')
+                    #     ids, scores = ileaf.calc_score(self.outs['j'], otherleaves, prefix=f"<{ileaf._name}>",level='debug', verbose=verbose+1) # CPU?
+                    # else:
+                    #     self.print(f"Singleprocessing for {len(otherleaves)} cpus", level='debug')
+                    #     ids, scores = ileaf.calc_score(self.outs['j'], otherleaves, prefix=f"<{ileaf._name}>",level='debug', verbose=verbose+1)
+                    # if(rcount==500):
+                    #     self.print(f"500: {time.time()-ref:.3f}")
+                    #     ref = time.time()
+                    #     raise ValueError("Stop")
                     self.avoid_filter[self.outs['j']] = ids.flatten() if(self.avoid_filter[self.outs['j']] is None) else np.union1d(self.avoid_filter[self.outs['j']], ids.flatten())
                 else:
                     ids = np.array([[self.outs['j'], 0]])
@@ -854,6 +864,7 @@ class Leaf:
             backup['saved'] = {'matchrate':self.saved_matchrate, 'veloffset':self.saved_veloffset}
 
             return backup
+        return None
 
     @_debug_leaf
     def calc_score(self, jout:int, otherleaves:list['Leaf'], prefix="", level='debug', verbose=0):
@@ -968,100 +979,78 @@ class Leaf:
 
 
 
-
     @_debug_leaf
     def calc_score_mp(self, jout:int, otherleaves:list['Leaf'], prefix="", level='debug', verbose=0):
         if not self.contam:
-            # for otherleaf in otherleaves:
             leng = len(otherleaves)
-            ileaf_dict = self.selfsave()
-            changed = np.empty((leng,4), dtype=bool)
-            changed_mem = shared_memory.SharedMemory(name=make_shm_name(self.id, self.iout, jout, prefix="YoungTreeCha"). create=True, size=changed.nbytes)
-            ids = np.empty((leng,2), dtype=int)
-            ids_mem = shared_memory.SharedMemory(name=make_shm_name(self.id, self.iout, jout, prefix="YoungTreeID"). create=True, size=ids.nbytes)
-            ids = np.ndarray(ids.shape, dtype=int, buffer=self.ids_mem.buf)
-            scores = np.empty((leng,5), dtype=float)
-            scores_mem = shared_memory.SharedMemory(name=make_shm_name(self.id, self.iout, jout, 
-            prefix="YoungTreeSco"). create=True, size=scores.nbytes)
-            scores = np.ndarray(scores.shape, dtype=float, buffer=self.scores_mem.buf)
+            man = mp.Manager()
+            _changed = man.list([0 for _ in range(leng)])
+            _ids = man.list([0 for _ in range(leng)])
+            _scores = man.list([0 for _ in range(leng)])
+            addresses = [_changed, _ids, _scores]
+            ileaf_dict = self.selfsave(backup={})
+            jleaf_dicts = []
+            jleaf_dicts = [otherleaf.selfsave(backup={}) for otherleaf in otherleaves]
             with Pool(processes=min(self.base.p.ncpu, leng)) as pool:
-                async_results = [pool.apply_async(_scores_mp, args=(ileaf_dict, otherleaf.selfsave(), jout, i, prefix, level, verbose, leng)) for i, otherleaf in enumerate(otherleaves)]
+                async_results = [pool.apply_async(_scores_mp, args=(ileaf_dict, jleaf_dicts[i], jout, i, prefix, level, verbose, leng, addresses)) for i in range(leng)]
                 for r in async_results: r.get()
+                pool.close()
+                pool.join()
+
+            _changed = np.asarray(_changed)
+            _ids = np.asarray(_ids)
+            _scores = np.asarray(_scores)
             for i in range(leng):
-                ichange1, jchange2, ichange3, jchange4 = changed[i]
+                ichange1, jchange2, ichange3, jchange4 = _changed[i]
                 if ichange1:
                     if(not jout in self.saved_matchrate.keys()):
                         self.saved_matchrate[jout] = {}
                         self.changed = True
                     if(not otherleaves[i].id in self.saved_matchrate[jout].keys()):
-                        self.saved_matchrate[jout][otherleaves[i].id] = scores[i][0]
+                        self.saved_matchrate[jout][otherleaves[i].id] = _scores[i][1]
                         self.changed = True
                 if jchange2:
                     if(not self.iout in otherleaves[i].saved_matchrate.keys()):
                         otherleaves[i].saved_matchrate[self.iout] = {}
                         otherleaves[i].changed = True
                     if(not self.id in otherleaves[i].saved_matchrate[self.iout].keys()):
-                        otherleaves[i].saved_matchrate[self.iout][self.id] = scores[i][0]
+                        otherleaves[i].saved_matchrate[self.iout][self.id] = _scores[i][2]
                         otherleaves[i].changed = True
                 if ichange3:
                     if(not jout in self.saved_veloffset.keys()):
                         self.saved_veloffset[jout] = {}
                         self.changed = True
                     if(not otherleaves[i].id in self.saved_veloffset[jout].keys()):
-                        self.saved_veloffset[jout][otherleaves[i].id] = scores[i][0]
+                        self.saved_veloffset[jout][otherleaves[i].id] = _scores[i][3]
                         self.changed = True
                 if jchange4:
                     if(not self.iout in otherleaves[i].saved_veloffset.keys()):
                         otherleaves[i].saved_veloffset[self.iout] = {}
                         otherleaves[i].changed = True
                     if(not self.id in otherleaves[i].saved_veloffset[self.iout].keys()):
-                        otherleaves[i].saved_veloffset[self.iout][self.id] = scores[i][0]
+                        otherleaves[i].saved_veloffset[self.iout][self.id] = _scores[i][3]
                         otherleaves[i].changed = True
-            arg = np.argsort(scores[:, 0])
-            result_ids = np.copy(ids[arg][::-1])
-            result_scores = np.copy(scores[arg][::-1])
+            arg = np.argsort(_scores[:, 0])
+            _ids = np.array(_ids)
+            result_ids = np.copy(_ids[arg][::-1])
+            result_scores = np.copy(_scores[arg][::-1])
 
-            changed_mem.close(); changed_mem.unlink()
-            ids_mem.close(); ids_mem.unlink()
-            scores_mem.close(); scores_mem.unlink()
             return result_ids, result_scores
-            # for i in range(leng):
-            #     otherleaf = otherleaves[i]
-            #     if otherleaf.iout != jout:
-            #         raise ValueError(f"Calc score at {jout} but found <{otherleaf.name}>!")
-            #     score1, selfind = self.calc_matchrate(otherleaf, prefix=prefix, verbose=verbose+1)
-            #     score2, otherind = otherleaf.calc_matchrate(self, prefix=prefix, verbose=verbose+1)
-            #     score3 = self.calc_veloffset(otherleaf, selfind=selfind, otherind=otherind, prefix=prefix, verbose=verbose+1)
-            #     score4 = np.exp( -np.abs(np.log10(self.cat['m']/otherleaf.cat['m'])) ) 
-            #     scores_tot = score1 + score2 + score3 + score4
-            #     scores[i] = (scores_tot, score1, score2, score3, score4)
-            #     ids[i] = (jout, otherleaf.id)
-            # arg = np.argsort(scores[:, 0])
-            # return ids[arg][::-1], scores[arg][::-1]
 
-def _scores_mp(ileaf_dict, jleaf_dict, jout, i, prefix, level, verbose, leng):
-    address = make_shm_name(ileaf_dict['gal']['id'], ileaf_dict['gal']['timestep'], jout, prefix="YoungTreeID")
-    exist = shared_memory.SharedMemory(name=address)
-    ids = np.ndarray((leng,2), dtype=int, buffer=exist.buf)
-    address = make_shm_name(ileaf_dict['gal']['id'], ileaf_dict['gal']['timestep'], jout, prefix="YoungTreeSco")
-    exist = shared_memory.SharedMemory(name=address)
-    scores = np.ndarray((leng,5), dtype=float, buffer=exist.buf)
-    address = make_shm_name(ileaf_dict['gal']['id'], ileaf_dict['gal']['timestep'], jout, prefix="YoungTreeCha")
-    exist = shared_memory.SharedMemory(name=address)
-    changed = np.ndarray((leng,4), dtype=bool, buffer=exist.buf)
 
+def _scores_mp(ileaf_dict, jleaf_dict, jout, i, prefix, level, verbose, leng, addresses):
+    _changed = addresses[0]
+    _ids = addresses[1]
+    _scores = addresses[2]
     score1, selfind, ichange1 = _calc_matchrate_mp(ileaf_dict, jleaf_dict)
     score2, otherind, jchange2 = _calc_matchrate_mp(jleaf_dict, ileaf_dict)
     score3, ichange3, jchange4 = _calc_veloffset_mp(ileaf_dict, jleaf_dict, selfind=selfind, otherind=otherind)
     score4 = np.exp( -np.abs(np.log10(ileaf_dict['gal']['m']/jleaf_dict['gal']['m'])) )
-    scores[i] = (score1 + score2 + score3 + score4, score1, score2, score3, score4)
-    ids[i] = (jout, jleaf_dict['gal']['id'])
-    changed[i] = [ichange1, jchange2, ichange3, jchange4]
+    _scores[i] = (score1 + score2 + score3 + score4, score1, score2, score3, score4)
+    _ids[i] = (jout, jleaf_dict['gal']['id'])
+    _changed[i] = [ichange1, jchange2, ichange3, jchange4]
 
-# backup_keys = ["nparts", "id", "timestep", "host", "aexp", "m", "x", "y", "z", "vx", "vy", "vz", "r", "rvir", "mvir"]
-# backup['gal'] = self.cat
-# if not ('part' in backup.keys()):backup['part'] = {'nparts':self.nparts, 'id':self.pid, 'vx':self.pvx, 'vy':self.pvy, 'vz':self.pvz, 'weight':self.pweight}
-# backup['saved'] = {'matchrate':self.saved_matchrate, 'veloffset':self.saved_veloffset}
+
 
 def _calc_matchrate_mp(ileaf_dict, jleaf_dict):
     large=False
@@ -1071,10 +1060,12 @@ def _calc_matchrate_mp(ileaf_dict, jleaf_dict):
     elif(ilen*jlen >= 1e6):
         if(min(ilen, jlen) >= 1e3):
             large=True
+    large=False
     ind = large_isin(ileaf_dict['part']['id'], jleaf_dict['part']['id']) if(large) else np.isin(ileaf_dict['part']['id'], jleaf_dict['part']['id'], assume_unique=True)
 
     val = -1 if not True in ind else np.sum( ileaf_dict['part']['weight'][ind] )
     jout = jleaf_dict['gal']['timestep']
+    changed = False
     if not jout in ileaf_dict['saved']['matchrate'].keys():
         ileaf_dict['saved']['matchrate'][jout] = {}
         changed = True
@@ -1099,8 +1090,11 @@ def _calc_veloffset_mp(ileaf_dict, jleaf_dict, selfind=None, otherind=None):
         else:
             selfv = _calc_bulkmotion_mp(ileaf_dict, selfind)
             otherv = _calc_bulkmotion_mp(jleaf_dict, otherind)
-            val = 1 - nbnorm(otherv - selfv)/(nbnorm(selfv)+nbnorm(otherv))
+            # val = 1 - nbnorm(otherv - selfv)/(nbnorm(selfv)+nbnorm(otherv))
+            val = 1 - norm(otherv - selfv)/(norm(selfv)+norm(otherv))
         jout = jleaf_dict['gal']['timestep']
+        ichanged = False
+        jchanged = False
         if not jout in ileaf_dict['saved']['veloffset'].keys():
             ileaf_dict['saved']['veloffset'][jout] = {}
             ichanged = True
@@ -1115,12 +1109,14 @@ def _calc_veloffset_mp(ileaf_dict, jleaf_dict, selfind=None, otherind=None):
             jchanged = True
     return val, ichanged, jchanged
 
-def _calc_bulkmotion_mp(ileaf_dict, checkind=None)
+def _calc_bulkmotion_mp(ileaf_dict, checkind=None):
     if checkind is None: checkind = np.full(ileaf_dict['part']['nparts'], True)
-
     weights = ileaf_dict['part']['weight'][checkind]
     weights /= np.sum(weights)
-    vx = nbsum( ileaf_dict['part']['vx'][checkind], weights ) - ileaf_dict['gal']['vx']
-    vy = nbsum( ileaf_dict['part']['vy'][checkind], weights ) - ileaf_dict['gal']['vy']
-    vz = nbsum( ileaf_dict['part']['vz'][checkind], weights ) - ileaf_dict['gal']['vz']
+    # vx = nbsum( ileaf_dict['part']['vx'][checkind], weights ) - ileaf_dict['gal']['vx']
+    # vy = nbsum( ileaf_dict['part']['vy'][checkind], weights ) - ileaf_dict['gal']['vy']
+    # vz = nbsum( ileaf_dict['part']['vz'][checkind], weights ) - ileaf_dict['gal']['vz']
+    vx = np.sum( ileaf_dict['part']['vx'][checkind] * weights ) - ileaf_dict['gal']['vx']
+    vy = np.sum( ileaf_dict['part']['vy'][checkind] * weights ) - ileaf_dict['gal']['vy']
+    vz = np.sum( ileaf_dict['part']['vz'][checkind] * weights ) - ileaf_dict['gal']['vz']
     return np.array([vx, vy, vz])
