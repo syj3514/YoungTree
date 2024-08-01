@@ -367,7 +367,7 @@ def atleast_numba_para(aa, b):
     Return True if any element of a is in b
     '''
     # nn = len(aa) # <- Fall-back from the nopython compilation path to the object mode compilation path has been detected, this is deprecated behaviour.
-    nn = len(aa) # <- Function "atleast_numba_para" was compiled in object mode without forceobj=True, but has lifted loops.
+    nn = aa.shape[0] # <- Function "atleast_numba_para" was compiled in object mode without forceobj=True, but has lifted loops.
     results = np.full(nn, False)
     
     # for j in nb.prange(nn): <--- Fall-back from the nopython compilation path to the object mode compilation path has been detected, this is deprecated behaviour.
@@ -375,7 +375,7 @@ def atleast_numba_para(aa, b):
     # for j in nb.prange(nn): <--- Compilation is falling back to object mode WITHOUT looplifting enabled because Function "atleast_numba_para" failed type inference due to: non-precise type pyobject
     for j in nb.prange(nn): # <--- Compilation is falling back to object mode WITHOUT looplifting enabled because Function "atleast_numba_para" failed type inference due to: Cannot determine Numba type of <class 'numba.core.dispatcher.LiftedLoop'>
         a = aa[j]
-        n = len(a)
+        n = a.shape[0]
         set_b = set(b)
         for i in nb.prange(n):
             if a[i] in set_b:

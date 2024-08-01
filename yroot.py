@@ -897,10 +897,8 @@ class Leaf:
             if(min(ilen, jlen) >= 1e3):
                 large=True
         
-        ind = large_isin(self.pid, otherleaf.pid) if(large) else np.isin(self.pid, otherleaf.pid, assume_unique=True)
-
-        # ind = large_isin(self.pid, otherleaf.pid)
-        # ind = np.isin(self.pid, otherleaf.pid, assume_unique=True)
+        # ind = large_isin(self.pid, otherleaf.pid) if(large) else np.isin(self.pid, otherleaf.pid, assume_unique=True)
+        ind = np.isin(self.pid, otherleaf.pid, assume_unique=True)
         if not True in ind:
             val = -1
         else:

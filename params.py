@@ -14,7 +14,7 @@ mode = "nc" #   Simulation name (should be supported by rur)
 #       "nh":       NewHorizon
 #       "nh2":      NewHorizon2
 #       "nc":       NewCluster
-#       None
+#       "custom":   Custom simulation
 
 galaxy = True # True: galaxy, False: halo
 fullpath=None # Full path to the HaloMaker output directory
