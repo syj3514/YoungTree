@@ -142,6 +142,7 @@ def do_onestep(Tree:'TreeBase', iout:int, fout:int, reftot:float=time.time()):
                 for out in outs:
                     if out > cutout:
                         if(os.path.exists(f"{resultdir}/by-product/{Tree.p.fileprefix}{out:05d}.pickle")):
+                            Tree.logger.info(f"Already dumped: `{resultdir}/by-product/{Tree.p.fileprefix}{out:05d}.pickle`")
                             Tree.out_of_use.append(out)
                         else:
                             Tree.finalize(out, level='info')
@@ -164,7 +165,17 @@ def do_onestep(Tree:'TreeBase', iout:int, fout:int, reftot:float=time.time()):
         print(e); Tree.logger.error(e)
         Tree.logger.error(Tree.summary())
         print("\nIteration is terminated (`do_onestep`)\n"); Tree.logger.error("\nIteration is terminated (`do_onestep`)\n")
-        os.remove(f"{Tree.p.resultdir}/{Tree.p.logprefix}success.tmp")
+        files = glob.glob(f"{Tree.p.resultdir}/{Tree.p.logprefix}current_*.tmp")
+        for file in files: os.remove(file)
+        sys.exit(1)
+    except KeyboardInterrupt:
+        print("\n\n"); Tree.logger.error("\n\n")
+        print(traceback.format_exc()); Tree.logger.error(traceback.format_exc())
+        print("\n\n"); Tree.logger.error("\n\n")
+        Tree.logger.error(Tree.summary())
+        print("\nKeyboard interrput (`do_onestep`)\n"); Tree.logger.error("\nKeyboard interrput (`do_onestep`)\n")
+        files = glob.glob(f"{Tree.p.resultdir}/{Tree.p.logprefix}current_*.tmp")
+        for file in files: os.remove(file)
         sys.exit(1)
     
     return time_record
@@ -179,15 +190,19 @@ def do_onestep(Tree:'TreeBase', iout:int, fout:int, reftot:float=time.time()):
 
 # @debugf(ontime=True, onmem=True, oncpu=True)
 def gather(p:DotDict, logger:logging.Logger):
+    '''
+    bricks -> ytree_all.pickle
+    '''
     go=True
     if os.path.exists(f"{p.resultdir}/{p.fileprefix}all.pickle"):
-        ans=input(f"You already have `{p.resultdir}/{p.fileprefix}all.pickle`. Ovewrite? [Y/N]")
+        logger.info(f"[gather] You already have `{p.resultdir}/{p.fileprefix}all.pickle`. Ovewrite? [Y/N]")
+        ans=input(f"[gather] You already have `{p.resultdir}/{p.fileprefix}all.pickle`. Ovewrite? [Y/N]")
         go = ans in yess
     if go:
-        logger.info("Gather all files...")
-        print("Gather all files...")
+        logger.info(" > Gather all files..."); print(" > Gather all files...")
         for i, iout in enumerate(p.nout):
             brick = pklload(f"{p.resultdir}/by-product/{p.fileprefix}{iout:05d}.pickle")
+            logger.info(f" > [{iout}] Found {len(brick)} bricks"); print(f" > [{iout}] Found {len(brick)} bricks")
             if(not 'host' in brick.dtype.names):
                 field_names = brick.dtype.names
                 dtypes = brick.dtype.descr
@@ -198,16 +213,10 @@ def gather(p:DotDict, logger:logging.Logger):
                     new_brick[name] = brick[name]
                 new_brick['host'] = np.zeros(len(brick), dtype=np.int32)
                 brick = new_brick
-            if i==0:
-                gals = brick
-            else:
-                gals = np.hstack((gals, brick))
-        # logger.info("Add column `last`...")
-        # temp = np.zeros(len(gals), dtype=np.int32)
+            gals = brick if i==0 else np.hstack((gals, brick))
         
-        logger.info("Convert `prog` and `desc` to easier format...")
-        print("Convert `prog` and `desc` to easier format...")
-        for gal in gals:
+        logger.info(" > Convert `prog` and `desc` to easier format..."); print(" > Convert `prog` and `desc` to easier format...")
+        for gal in tqdm(gals):
             if gal['prog'] is None:
                 gal['prog'] = np.array([], dtype=np.int32)
                 gal['prog_score'] = np.array([], dtype=np.float64)
@@ -228,23 +237,28 @@ def gather(p:DotDict, logger:logging.Logger):
                 gal['desc'] = desc[arg].astype(np.int32)
                 gal['desc_score'] = descscore[arg].astype(np.float64)
         pklsave(gals, f"{p.resultdir}/{p.fileprefix}all.pickle", overwrite=True)
-        logger.info(f"`{p.resultdir}/{p.fileprefix}all.pickle` saved\n")
-        print(f"`{p.resultdir}/{p.fileprefix}all.pickle` saved\n")
+        logger.info(f"[gather] `{p.resultdir}/{p.fileprefix}all.pickle` saved\n")
+        print(f"[gather] `{p.resultdir}/{p.fileprefix}all.pickle` saved\n")
     # gals = pklload(f"{p.resultdir}/{p.fileprefix}all.pickle")
 
 
 def connect(p:DotDict, logger:logging.Logger):
-    gals = pklload(f"{p.resultdir}/{p.fileprefix}all.pickle")
-    complete = True
-    for iout in p.nout:
-        temp = gals[gals['timestep']==iout]
-        if(len(temp)!=np.max(temp['id'])):
-            complete = False
+    '''
+    ytree_all.pickle -> ytree_fatson.pickle
+    '''
     go=True
-    if os.path.exists(f"{p.resultdir}/{p.fileprefix}stable.pickle"):
-        ans=input(f"You already have `{p.resultdir}/{p.fileprefix}stable.pickle`. Ovewrite? [Y/N]")
+    if os.path.exists(f"{p.resultdir}/{p.fileprefix}fatson.pickle"):
+        logger.info(f"[connect] You already have `{p.resultdir}/{p.fileprefix}fatson.pickle`. Ovewrite? [Y/N]")
+        ans=input(f"[connect] You already have `{p.resultdir}/{p.fileprefix}fatson.pickle`. Ovewrite? [Y/N]")
         go = ans in yess
+
     if go:
+        gals = pklload(f"{p.resultdir}/{p.fileprefix}all.pickle")
+        complete = True
+        for iout in p.nout:
+            temp = gals[gals['timestep']==iout]
+            if(len(temp)!=np.max(temp['id'])):
+                complete = False
         logger.info("Make dictionary from catalogue...")
         if('last' in gals.dtype.names): gals = drop_fields(gals, 'last')
         if('from' in gals.dtype.names): gals = drop_fields(gals, 'from')
@@ -298,8 +312,8 @@ def connect(p:DotDict, logger:logging.Logger):
                                     logger.debug(f"\tAlso, {idesc} newly has father {prog}({pscore:.2f})")
                                     nfindson += 1
                                     nfindfat += 1
-        logger.info(f" > {nfindson} gals found son & {nfindfat} gals found fat (of {ngal:.2f})\n")
-        print(f" > {nfindson} gals found son & {nfindfat} gals found fat (of {ngal:.2f})\n")
+        logger.info(f"[connect]  > {nfindson} gals found son & {nfindfat} gals found fat (of {ngal:.2f})\n")
+        print(f"[connect]  > {nfindson} gals found son & {nfindfat} gals found fat (of {ngal:.2f})\n")
         
         logger.info("Find son again (indirect match)...")
         print("Find son again (indirect match)...")
@@ -335,8 +349,8 @@ def connect(p:DotDict, logger:logging.Logger):
                                 dhalo['fat_score'] = pscore
         
         
-        logger.info("Find father again (indirect match)...")
-        print("Find father again (indirect match)...")
+        logger.info("[connect] Find father again (indirect match)...")
+        print("[connect] Find father again (indirect match)...")
         iterobj = tqdm(p.nout)
         for iout in iterobj:
             igals = inst[iout]
@@ -368,8 +382,8 @@ def connect(p:DotDict, logger:logging.Logger):
                                 phalo['son'] = iid
                                 phalo['son_score'] = dscore
 
-        logger.info("Check the rest...")
-        print("Check the rest...")
+        logger.info("[connect] Check the rest...")
+        print("[connect] Check the rest...")
         iterobj = tqdm(p.nout)
         for iout in iterobj:
             igals = inst[iout]
@@ -388,25 +402,30 @@ def connect(p:DotDict, logger:logging.Logger):
                     logger.debug(f"\t{iid} newly has fat{iprog}({ipscore:.2f})")
 
         pklsave(inst, f"{p.resultdir}/{p.fileprefix}fatson.pickle", overwrite=True)
-        logger.info(f"`{p.resultdir}/{p.fileprefix}fatson.pickle` saved\n")    
-        print(f"`{p.resultdir}/{p.fileprefix}fatson.pickle` saved\n")
+        logger.info(f"[connect] `{p.resultdir}/{p.fileprefix}fatson.pickle` saved\n")    
+        print(f"[connect] `{p.resultdir}/{p.fileprefix}fatson.pickle` saved\n")
 
 def build_branch(p:DotDict, logger:logging.Logger):
-    logger.info("Build branches...")
-    print("Build branches...")
-    inst = pklload(f"{p.resultdir}/{p.fileprefix}fatson.pickle")
-    complete = True
-    for iout in p.nout:
-        temp = inst[iout]
-        if(len(temp)!=np.max(temp['id'])):
-            complete = False
+    '''
+    ytree_fatson.pickle -> ytree_stable.pickle
+    '''
+    logger.info("[build_branch] Build branches...")
+    print("[build_branch] Build branches...")
     go=True
     if os.path.exists(f"{p.resultdir}/{p.fileprefix}stable.pickle"):
-        ans=input(f"You already have `{p.resultdir}/{p.fileprefix}stable.pickle`. Ovewrite? [Y/N]")
+        logger.info(f"[build_branch] You already have `{p.resultdir}/{p.fileprefix}stable.pickle`. Ovewrite? [Y/N]")
+        ans=input(f"[build_branch] You already have `{p.resultdir}/{p.fileprefix}stable.pickle`. Ovewrite? [Y/N]")
         go = ans in yess
+
     if go:
-        logger.info("Build branches forward...")
-        print("Build branches forward...")
+        inst = pklload(f"{p.resultdir}/{p.fileprefix}fatson.pickle")
+        complete = True
+        for iout in p.nout:
+            temp = inst[iout]
+            if(len(temp)!=np.max(temp['id'])):
+                complete = False
+        logger.info("Yes -> Build branches forward...")
+        print("Yes -> Build branches forward...")
         iterobj = tqdm(p.nout[::-1]) # From first galaxies
         for iout in iterobj:
             igals = inst[iout]
@@ -444,16 +463,18 @@ def build_branch(p:DotDict, logger:logging.Logger):
                         ihalo_iout['last'] = iid
 
         gals = None
-        logger.info("Collect galaxies...")
-        print("Collect galaxies...")
+        logger.info("[build_branch] Collect galaxies...")
+        print("[build_branch] Collect galaxies...")
         iterobj = tqdm(p.nout)
         for iout in iterobj:
             iinst = inst[iout]
             gals = iinst if gals is None else np.hstack((gals, iinst))
         pklsave(gals, f"{p.resultdir}/{p.fileprefix}stable.pickle", overwrite=True)
-        logger.info(f"`{p.resultdir}/{p.fileprefix}stable.pickle` saved\n")                                    
-        print(f"`{p.resultdir}/{p.fileprefix}stable.pickle` saved\n")
-                            
+        logger.info(f"[build_branch] `{p.resultdir}/{p.fileprefix}stable.pickle` saved\n")                                    
+        print(f"[build_branch] `{p.resultdir}/{p.fileprefix}stable.pickle` saved\n")
+    else:
+        logger.info("[build_branch] No -> Skip building branches\n")
+        print("[build_branch] No -> Skip building branches\n")                       
 
 
 # @debugf(ontime=True, onmem=True, oncpu=True)

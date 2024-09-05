@@ -302,7 +302,25 @@ class TreeBase:
         iout = self.outs[iorj]
         if(iout in self.out_of_use): return
         if(not iout in self.out_on_table): self.out_on_table.append(iout)
-        if( not os.path.exists(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}.pickle") ):
+        if(os.path.exists(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}.pickle")):
+            # CHECK
+            fname = f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}.pickle"
+            exist = pklload(fname)
+            further = False
+            vstack = np.vstack(exist['desc'])
+            if(vstack.shape[1]==1):
+                if( (exist['desc']==None).all() ): further = True
+            else:
+                douts = np.unique(np.vstack(exist['desc'])[:,0])
+                if len(douts) != self.p.nsnap: further = True
+            if(further):
+                oldcount = 0
+                fname_old = f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_{oldcount}.pickle"
+                while(os.path.exists(fname_old)):
+                    oldcount += 1
+                    fname_old = f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_{oldcount}.pickle"
+                os.rename(fname, fname_old)
+        if( not os.path.exists(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}.pickle") ): #<-------HERE!!!!!!!!!!!!!
             prefix2 = f"[write_leaves]({iout})"
 
             keys = list(self.leaves[iorj].keys())
@@ -649,6 +667,7 @@ class TreeBase:
         """
         prefix2 = f"[Reduce Backup file] ({iout})"
         if(os.path.exists(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}.pickle")):
+            self.print(f"{prefix2} Already saved `{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}.pickle`", level=level)
             return
         if not os.path.exists(f"{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp"):
             raise FileNotFoundError(f"`{self.p.resultdir}/by-product/{self.p.fileprefix}{iout:05d}_temp` is not found!")

@@ -1,5 +1,5 @@
 import numpy as np
-import os, shutil
+import os, shutil, glob
 from collections.abc import Iterable
 import numba as nb
 import importlib
@@ -109,37 +109,59 @@ def load_nout(repo, galaxy=True, path_in_repo=None, finalout=None):
 def load_nstep(nout):
     nstep = np.arange(len(nout))[::-1]+1
     return nstep
-
-def pklsave(data,fname, overwrite=False):
+import time
+def pklsave(data,fname, overwrite=False, verbose=False):
     '''
     pklsave(array, 'repo/fname.pickle', overwrite=False)
     '''
+    if(verbose):
+        print(f"Dump `{fname}`...", end='\t')
+        ref = time.time()
+    if(np.__version__>'2.0.0'):
+        if(fname[-7:] == '.pickle'):
+            fname = f"{fname}2"
     if os.path.exists(fname):
         if overwrite == False:
-            raise FileExistsError(f"{fname} already exist!!")
+            # Change the name of the existing file
+            oldcount = 0
+            assert '.pickle' in fname, f"`{fname}` is not a pickle file"
+            fname_old = f"{fname[:-7]}_{oldcount}.pickle"
+            while(os.path.exists(fname_old)):
+                oldcount += 1
+                fname_old = f"{fname[:-7]}_{oldcount}.pickle"
+            os.rename(fname, fname_old)
+
+            # Save the new file
+            with open(fname, 'wb') as handle:
+                pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)
         else:
             with open(f"{fname}.pkl", 'wb') as handle:
                 pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)
             os.remove(fname)
             os.rename(f"{fname}.pkl", fname)
     else:
-        with open(f"{fname}", 'wb') as handle:
+        with open(fname, 'wb') as handle:
             pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    if(verbose): print(f"Done! ({time.time()-ref:.2f} sec)")
 
-def pklload(fname):
+def pklload(fname, verbose=False):
     '''
     array = pklload('path/fname.pickle')
     '''
+    if(verbose):
+        print(f"Load `{fname}`...", end='\t')
+        ref = time.time()
     with open(fname, 'rb') as handle:
         try:
             arr = pickle.load(handle)
-        except EOFError:
+        except EOFError or ModuleNotFoundError:
             arr = pickle.load(handle.read())
             # arr = {}
             # unpickler = pickle.Unpickler(handle)
             # # if file is not empty scores will be equal
             # # to the value unpickled
             # arr = unpickler.load()
+    if(verbose): print(f"Done! ({time.time()-ref:.2f} sec)")
     return arr
 
 import datetime
