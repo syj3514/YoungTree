@@ -1,6 +1,7 @@
 import sys
 import importlib
 from ytool import *
+assert np.__version__ < '2.0.0'
 from yrun import make_log, do_onestep, connect, gather, DebugDecorator, build_branch, follow_log
 import yroot
 import time
