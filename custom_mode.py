@@ -1,3 +1,3 @@
-repo = "/storage7/NewCluster"
+repo = "/storage8/NewCluster_sEdd"
 rurmode = "none"
 dp = True

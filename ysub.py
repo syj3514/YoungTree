@@ -18,8 +18,8 @@ try:
     resultdir = args.resultdir
     logprefix = args.logprefix
     mainlogname = args.mainlogname
-    with(open(f"{resultdir}/{logprefix}success.tmp", "wb")) as f:
-        f.write(b"success")
+    with(open(f"{resultdir}/{logprefix}current_{iout:05d}.tmp", "wb")) as f:
+        f.write(b"current")
 
     if(os.path.exists(f"{resultdir}/{logprefix}treebase.temp.pickle")):
         treebase = pklload(f"{resultdir}/{logprefix}treebase.temp.pickle")
@@ -60,6 +60,14 @@ except Exception as e:
     print()
     print(e)
     print(traceback.format_exc())
-    os.remove(f"{resultdir}/{logprefix}success.tmp")
+    files = glob.glob(f"{resultdir}/{logprefix}current_*.tmp")
+    for file in files: os.remove(file)
+    sys.exit(1)
+except KeyboardInterrupt:
+    print("[Keyboard interrupt in `ysub.py`]")
+    print()
+    print(traceback.format_exc())
+    files = glob.glob(f"{resultdir}/{logprefix}current_*.tmp")
+    for file in files: os.remove(file)
     sys.exit(1)
 

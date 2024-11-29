@@ -35,98 +35,130 @@ if __name__=='__main__':
     if(args.ncpu is not None): params.ncpu = args.ncpu
     set_num_threads(params.ncpu)
 
-    if not os.path.exists(f"{params.resultdir}/by-product"):
-        os.mkdir(f"{params.resultdir}/by-product")
-    if not os.path.exists(f"{params.resultdir}/log"):
-        os.mkdir(f"{params.resultdir}/log")
+    FILE_YTREE_STABLE = f"{params.resultdir}/{params.fileprefix}stable.pickle"
+    FILE_CHECKPOINT = f"{params.resultdir}/by-product/{params.fileprefix}checkpoint.pickle"
+    FILE_GATHER = f"{params.resultdir}/by-product/{params.fileprefix}all.pickle"
+    FILE_FATSON = f"{params.resultdir}/{params.fileprefix}fatson.pickle"
+    FILE_TREEBASE = f"{params.resultdir}/{params.logprefix}treebase.temp.pickle"
+    DIR_BY_PRODUCT = f"{params.resultdir}/by-product"
+    DIR_LOG = f"{params.resultdir}/log"
+
+    if not os.path.exists(DIR_BY_PRODUCT):
+        os.mkdir(DIR_BY_PRODUCT)
+    if not os.path.exists(DIR_LOG):
+        os.mkdir(DIR_LOG)
     fout = np.max(params.nout)
-    if os.path.exists(f"{params.resultdir}/{params.fileprefix}stable.pickle"):
-        mainlog.info(f"`{params.resultdir}/{params.fileprefix}stable.pickle` found... check status...")
-        stable = pklload(f"{params.resultdir}/{params.fileprefix}stable.pickle")
+    print(params.nout)
+    if os.path.exists(FILE_YTREE_STABLE):
+        print(f"`{FILE_YTREE_STABLE}` found... check status...")
+        mainlog.info(f"`{FILE_YTREE_STABLE}` found... check status...")
+        stable = pklload(FILE_YTREE_STABLE)
         maxout = np.max(stable['timestep'])
         further = maxout < fout
+        print(f"Further: {further} ({maxout}<{fout})")
+        if(os.path.exists(FILE_CHECKPOINT))and(further):
+            os.remove(FILE_CHECKPOINT)
     try:
-        if (not os.path.exists(f"{params.resultdir}/{params.fileprefix}stable.pickle"))or(further):
-            if (not os.path.exists(f"{params.resultdir}/{params.fileprefix}fatson.pickle"))or(further):
-                if (not os.path.exists(f"{params.resultdir}/{params.fileprefix}all.pickle"))or(further):
-                    if (not os.path.exists(f"{params.resultdir}/by-product/{params.fileprefix}checkpoint.pickle"))or(further):
-                        if(not os.path.exists(f"{params.resultdir}/{params.logprefix}treebase.temp.pickle"))or(not params.takeover):
-                            treebase = yroot.TreeBase(params, logger=mainlog)
-                            pklsave(treebase, f"{params.resultdir}/{params.logprefix}treebase.temp.pickle", overwrite=True)
-                            del treebase
-                        reftime = time.time()
+        if (not os.path.exists(FILE_YTREE_STABLE))or(further):
+            if (not os.path.exists(FILE_FATSON))or(further):
+                if (not os.path.exists(FILE_GATHER))or(further):
+                    if (not os.path.exists(FILE_CHECKPOINT))or(further): # <- All pickle saved
+                        #-------------------------------------------------------------------------------------
+                        # ysub done, but not gathered
+                        #-------------------------------------------------------------------------------------
+                        check_filelist = True
                         for iout in params.nout:
-                            if os.path.exists(f"{params.resultdir}/by-product/{params.fileprefix}{iout:05d}.pickle"):
-                                if(params.takeover):
-                                    if(iout == np.max(params.nout))and(params.takeover)and(not params.default):
-                                        mainlog.info("Calculate last pids...")
-                                        treebase = pklload(f"{params.resultdir}/{params.logprefix}treebase.temp.pickle")
-                                        treebase.load_gals(iout)
-                                        pklsave(treebase, f"{params.resultdir}/{params.logprefix}treebase.temp.pickle", overwrite=True)
-                                    fout = np.max(params.nout[params.nout<iout])
-                                    continue
+                            FILE_BRICK = f"{params.resultdir}/by-product/{params.fileprefix}{iout:05d}.pickle"
+                            if not os.path.exists(FILE_BRICK):
+                                check_filelist = False
+                                break
+                        if check_filelist:
+                            mainlog.info("All pickle files are saved! It's time to `gather`!")
+                            pklsave(["All pickle files are saved! It's time to `gather`!"], FILE_CHECKPOINT)
+                        #-------------------------------------------------------------------------------------
+                        # ysub not completed
+                        #-------------------------------------------------------------------------------------
+                        else:
+                            if(not os.path.exists(FILE_TREEBASE))or(not params.takeover):
+                                treebase = yroot.TreeBase(params, logger=mainlog)
+                                pklsave(treebase, FILE_TREEBASE, overwrite=True)
+                                del treebase
+                            reftime = time.time()
+                            for iout in params.nout:
+                                FILE_BRICK = f"{params.resultdir}/by-product/{params.fileprefix}{iout:05d}.pickle"
+                                if os.path.exists(FILE_BRICK):
+                                    if(params.takeover):
+                                        if(iout == np.max(params.nout))and(params.takeover)and(not params.default):
+                                            mainlog.info("Calculate last pids...")
+                                            treebase = pklload(FILE_TREEBASE)
+                                            treebase.load_gals(iout)
+                                            pklsave(treebase, FILE_TREEBASE, overwrite=True)
+                                        if(iout == np.min(params.nout)):
+                                            break
+                                        fout = np.max(params.nout[params.nout<iout])
+                                        continue
+                                    else:
+                                        mainlog.warning(f"! No takeover ! Remove `{FILE_BRICK}`")
+                                        os.remove(FILE_BRICK)
+                                subdir = os.getcwd()
+                                if(not 'YoungTree' in subdir): subdir = f"{subdir}/YoungTree"
+
+                                
+                                #For tardis07, /gem_home/jeon/.conda/envs/py310/bin/python3
+                                subprocess.run(["python3", f"{subdir}/ysub.py", str(iout), str(fout), str(reftime), params.resultdir, params.logprefix, mainlog.name], check=True)
+
+                                FILE_CURRENT = f"{params.resultdir}/{params.logprefix}current_{iout:05d}.tmp"
+                                if(os.path.exists(FILE_CURRENT)):
+                                    os.remove(FILE_CURRENT)
                                 else:
-                                    mainlog.warning(f"! No takeover ! Remove `{resultdir}/by-product/{params.fileprefix}{iout:05d}.pickle`")
-                                    os.remove(f"{params.resultdir}/by-product/{params.fileprefix}{iout:05d}.pickle")
-                            subdir = os.getcwd()
-                            if(not 'YoungTree' in subdir): subdir = f"{subdir}/YoungTree"
-
-                            
-                            #For tardis07, /gem_home/jeon/.conda/envs/py310/bin/python3
-                            subprocess.run(["python3", f"{subdir}/ysub.py", str(iout), str(fout), str(reftime), params.resultdir, params.logprefix, mainlog.name], check=True)
-
-
-                            if(os.path.exists(f"{params.resultdir}/{params.logprefix}success.tmp")):
-                                os.remove(f"{params.resultdir}/{params.logprefix}success.tmp")
-                            else:
-                                if(os.path.exists(f"{params.resultdir}/by-product/{params.fileprefix}{iout:05d}.pickle")):
-                                    pass
-                                else:
-                                    if(os.path.exists(f"{params.resultdir}/by-product/{params.fileprefix}{iout:05d}_temp")):
+                                    if(os.path.exists(FILE_BRICK)):
                                         pass
                                     else:
-                                        raise RuntimeError("No success.tmp")
-                            time.sleep(1)
-                        # for iout in params.nout:
-                        #     do_onestep(treebase, iout, reftot=reftime)
-                        #     if treebase.memory > treebase.p.flushGB:
-                        #         treebase.flush(iout)
-                        treebase = pklload(f"{params.resultdir}/{params.logprefix}treebase.temp.pickle")
-                        if(treebase.mainlog.name != mainlog.name):
-                            treebase.mainlog = follow_log(mainlog.name, detail=treebase.p.detail)
-                        treebase.logger = mainlog
-                        # treebase.p = DotDict(treebase.p)
-                        outs = treebase.out_on_table
-                        for iout in outs:
-                            treebase.finalize(iout, level='info')
-                            treebase.flush(iout)
-                        treebase.out_on_table=[]
-                        treebase.mainlog.info(f"\n{treebase.summary()}\n")
-                        
-                        pklsave(np.array([]), f"{params.resultdir}/by-product/{params.fileprefix}checkpoint.pickle")
-                        treebase.mainlog.info("\nLeaf save Done\n"); print("\nLeaf save Done\n")
-                        treebase = None
-                        del treebase
-                        os.remove(f"{params.resultdir}/{params.logprefix}treebase.temp.pickle")
-                        gc.collect()
+                                        if(os.path.exists(f"{params.resultdir}/by-product/{params.fileprefix}{iout:05d}_temp")):
+                                            pass
+                                        else:
+                                            raise RuntimeError("No current file")
+                                time.sleep(1)
+
+                            treebase = pklload(FILE_TREEBASE)
+                            if(treebase.mainlog.name != mainlog.name):
+                                treebase.mainlog = follow_log(mainlog.name, detail=treebase.p.detail)
+                            treebase.logger = mainlog
+
+                            outs = treebase.out_on_table
+                            for iout in outs:
+                                treebase.finalize(iout, level='info')
+                                treebase.flush(iout)
+                            treebase.out_on_table=[]
+                            treebase.mainlog.info(f"\n{treebase.summary()}\n")
+                            
+                            pklsave(["All pickle files are saved! It's time to `gather`!"], FILE_CHECKPOINT)
+                            treebase.mainlog.info("\nLeaf save Done\n"); print("\nLeaf save Done\n")
+                            treebase = None
+                            del treebase
+                            os.remove(FILE_TREEBASE)
+                            gc.collect()
+                        #-------------------------------------------------------------------------------------
 
                     func = DebugDecorator(gather, params=params, logger=mainlog)
                     func(params, mainlog)
                     mainlog.info("\nGather Done\n"); print("\nGather Done\n")
                     
                 mainlog.info("\nConnect Start\n"); print("\nConnect Start\n")
-                connectlog, resultdir,_ = make_log(params.repo, "connect", detail=params.detail, prefix=params.logprefix, path_in_repo=params.path_in_repo)
+                connectlog, resultdir, logname = make_log(params.repo, "connect", detail=params.detail, prefix=params.logprefix, path_in_repo=params.path_in_repo)
+                mainlog.info(f"\nSee `{logname}`\n"); print(f"\nSee `{logname}`\n")
                 func = DebugDecorator(connect, params=params, logger=connectlog)
                 func(params, connectlog)
                 mainlog.info("\nConnect Done\n"); print("\nConnect Done\n")
 
             mainlog.info("\nBuild Start\n"); print("\nBuild Start\n")
-            buildlog, resultdir,_ = make_log(params.repo, "build", detail=params.detail, prefix=params.logprefix, path_in_repo=params.path_in_repo)
+            buildlog, resultdir, logname = make_log(params.repo, "build", detail=params.detail, prefix=params.logprefix, path_in_repo=params.path_in_repo)
+            mainlog.info(f"\nSee `{logname}`\n"); print(f"\nSee `{logname}`\n")
             func = DebugDecorator(build_branch, params=params, logger=buildlog)
             func(params, buildlog)
             mainlog.info("\nBuild Done\n"); print("\nBuild Done\n")
 
-        mainlog.info(f"\nYoungTree Done\nSee `{params.resultdir}/{params.fileprefix}stable.pickle`"); print(f"\nYoungTree Done\nSee `{params.resultdir}/{params.fileprefix}stable.pickle`")
+        mainlog.info(f"\nYoungTree Done\nSee `{FILE_YTREE_STABLE}`"); print(f"\nYoungTree Done\nSee `{FILE_YTREE_STABLE}`")
     except Exception as e:
         print(); mainlog.error("")
         print(traceback.format_exc()); mainlog.error(traceback.format_exc())
