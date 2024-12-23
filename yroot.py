@@ -113,6 +113,7 @@ class TreeBase:
                 if(not iout in self.accesed): self.accesed.append(iout)
                 path_in_repo="" if self.p.mode[0] == '/' else "snapshots"
                 snap = uri.RamsesSnapshot(self.p.repo, iout, mode=self.p.rurmode, path_in_repo=path_in_repo)
+                snap.shmprefix = "YoungTree"
                 if(self.p.loadall)and(not iout in self.banned_list):
                     if(self.p.mode[0]=='y')or(self.p.mode=='nh'):
                         snap.get_part(pname=self.partstr, python=(not self.p.usefortran), nthread=self.p.ncpu, target_fields=["x","y","z","vx","vy","vz","m","id","cpu"])
@@ -951,6 +952,9 @@ class Leaf:
         vx = nbsum( self.pvx[checkind], weights ) - self.cat['vx']
         vy = nbsum( self.pvy[checkind], weights ) - self.cat['vy']
         vz = nbsum( self.pvz[checkind], weights ) - self.cat['vz']
+        # vx = np.sum( self.pvx[checkind] * weights ) - self.cat['vx']
+        # vy = np.sum( self.pvy[checkind] * weights ) - self.cat['vy']
+        # vz = np.sum( self.pvz[checkind] * weights ) - self.cat['vz']
 
         return np.array([vx, vy, vz])
 
@@ -1078,7 +1082,8 @@ def _calc_matchrate_mp(ileaf_dict, jleaf_dict):
         if(min(ilen, jlen) >= 1e3):
             large=True
     large=False
-    ind = large_isin(ileaf_dict['part']['id'], jleaf_dict['part']['id']) if(large) else np.isin(ileaf_dict['part']['id'], jleaf_dict['part']['id'], assume_unique=True)
+    # ind = large_isin(ileaf_dict['part']['id'], jleaf_dict['part']['id']) if(large) else np.isin(ileaf_dict['part']['id'], jleaf_dict['part']['id'], assume_unique=True)
+    ind = np.isin(ileaf_dict['part']['id'], jleaf_dict['part']['id'], assume_unique=True)
 
     val = -1 if not True in ind else np.sum( ileaf_dict['part']['weight'][ind] )
     jout = jleaf_dict['gal']['timestep']

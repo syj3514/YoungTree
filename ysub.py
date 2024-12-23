@@ -11,6 +11,7 @@ try:
     parser.add_argument("resultdir", metavar='resultdir', help='result_directory', type=str)
     parser.add_argument("logprefix", metavar='logprefix', help='prefix of logfile', type=str)
     parser.add_argument("mainlogname", metavar='mainlogname', help='name of mainlog', type=str)
+    parser.add_argument("maxout", metavar='maxout', help='name of mainlog', type=int)
     args = parser.parse_args()
     iout = args.iout
     fout = args.fout
@@ -18,6 +19,7 @@ try:
     resultdir = args.resultdir
     logprefix = args.logprefix
     mainlogname = args.mainlogname
+    maxout = args.maxout
     with(open(f"{resultdir}/{logprefix}current_{iout:05d}.tmp", "wb")) as f:
         f.write(b"current")
 
@@ -32,7 +34,7 @@ try:
 
 
 
-    time_record = do_onestep(treebase, iout, fout, reftot=reftot)
+    time_record = do_onestep(treebase, iout, fout, maxout, reftot=reftot)
 
 
 

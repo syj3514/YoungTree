@@ -1,7 +1,7 @@
 import sys
 import importlib
 from ytool import *
-assert np.__version__ < '2.0.0'
+#assert np.__version__ < '2.0.0'
 from yrun import make_log, do_onestep, connect, gather, DebugDecorator, build_branch, follow_log
 import yroot
 import time
@@ -50,6 +50,7 @@ if __name__=='__main__':
         os.mkdir(DIR_LOG)
     fout = np.max(params.nout)
     print(params.nout)
+    maxout = -1
     if os.path.exists(FILE_YTREE_STABLE):
         print(f"`{FILE_YTREE_STABLE}` found... check status...")
         mainlog.info(f"`{FILE_YTREE_STABLE}` found... check status...")
@@ -106,7 +107,7 @@ if __name__=='__main__':
 
                                 
                                 #For tardis07, /gem_home/jeon/.conda/envs/py310/bin/python3
-                                subprocess.run(["python3", f"{subdir}/ysub.py", str(iout), str(fout), str(reftime), params.resultdir, params.logprefix, mainlog.name], check=True)
+                                subprocess.run(["python3", f"{subdir}/ysub.py", str(iout), str(fout), str(reftime), params.resultdir, params.logprefix, mainlog.name, str(maxout)], check=True)
 
                                 FILE_CURRENT = f"{params.resultdir}/{params.logprefix}current_{iout:05d}.tmp"
                                 if(os.path.exists(FILE_CURRENT)):

@@ -20,7 +20,7 @@ galaxy = True # True: galaxy, False: halo
 fullpath=None # Full path to the HaloMaker output directory
 nsnap = 4 # The number of snapshots to be considered when making trees
 mcut = 0.01# Number fraction threshold for the prog/desc candidates
-finalout = 516 # Maximum output number to be considered
+finalout = 613 # Maximum output number to be considered
 
 
 
@@ -51,7 +51,7 @@ nice = 1 # set os nice value
 
 path_in_repo = "YoungTree" # Where output and log files are saved
 fileprefix = "ytree_"
-logprefix = f"ytree_516_" # file name of ytree log (./logprefix_iout.log)
+logprefix = f"ytree_613_" # file name of ytree log (./logprefix_iout.log)
 detail = False # Detail debugging in log (True: DEBUG level, False: INFO level)
 ontime = True # Time check
 onmem = False # Memory check

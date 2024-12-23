@@ -38,7 +38,7 @@ def treerecord(iout:int, nout:int, elapse_s:float, total_elapse_s:float, logger:
     logger.info(a)
     
 # from yroot import TreeBase # Remove this when running!
-def do_onestep(Tree:'TreeBase', iout:int, fout:int, reftot:float=time.time()):
+def do_onestep(Tree:'TreeBase', iout:int, fout:int, maxout:int, reftot:float=time.time()):
     nout = Tree.p.nout
     nstep = Tree.p.nstep
     resultdir = Tree.p.resultdir
@@ -157,7 +157,7 @@ def do_onestep(Tree:'TreeBase', iout:int, fout:int, reftot:float=time.time()):
             Tree.leaves['i']={}
             time_record.append([f"Write leaves at {Tree.outs['i']}", time.time()-t0]); t0 = time.time()
             Tree.logger.info(f"\n{Tree.summary()}\n")
-            treerecord(iout, nout[nout<=fout], time.time()-ref, time.time()-reftot, Tree.mainlog)
+            treerecord(iout, nout[(nout<=fout)&(nout >= (maxout-Tree.p.nsnap))], time.time()-ref, time.time()-reftot, Tree.mainlog)
     except Exception as e:
         print("\n\n"); Tree.logger.error("\n\n")
         print(traceback.format_exc()); Tree.logger.error(traceback.format_exc())
