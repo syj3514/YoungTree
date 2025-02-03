@@ -472,6 +472,16 @@ def build_branch(p:DotDict, logger:logging.Logger):
         pklsave(gals, f"{p.resultdir}/{p.fileprefix}stable.pickle", overwrite=True)
         logger.info(f"[build_branch] `{p.resultdir}/{p.fileprefix}stable.pickle` saved\n")                                    
         print(f"[build_branch] `{p.resultdir}/{p.fileprefix}stable.pickle` saved\n")
+
+        dtype = gals.dtype.descr
+        dtype = [idt for idt in dtype if not "O" in idt[1]]
+        arr = np.empty(gals.size, dtype=dtype)
+        for name in arr.dtype.names:
+            arr[name] = gals[name]
+        pklsave(arr, f"{p.resultdir}/{p.fileprefix}light.pickle", overwrite=True)
+        logger.info(f"[build_branch] `{p.resultdir}/{p.fileprefix}light.pickle` saved\n")                                    
+        print(f"[build_branch] `{p.resultdir}/{p.fileprefix}light.pickle` saved\n")
+
     else:
         logger.info("[build_branch] No -> Skip building branches\n")
         print("[build_branch] No -> Skip building branches\n")                       
